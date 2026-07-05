@@ -1,0 +1,61 @@
+{
+  "name": "aegis",
+  "version": "1.0.0",
+  "description": "Privacy-focused browser with per-user workspaces",
+  "main": "main.js",
+  "build": {
+    "appId": "com.aegis.browser",
+    "productName": "AEGIS",
+    "win": {
+      "target": ["portable", "nsis"],
+      "icon": "logo.ico",
+      "signDlls": false,
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "AEGIS-${version}.exe",
+      "requestExecutionLevel": "user"
+    },
+    "nsis": {
+      "artifactName": "AEGIS-Setup-${version}.exe",
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AEGIS Browser",
+      "installerIcon": "logo.ico",
+      "uninstallerIcon": "logo.ico",
+      "installerHeaderIcon": "logo.ico",
+      "uninstallDisplayName": "AEGIS Browser",
+      "license": false
+    },
+    "extraResources": [
+      { "from": "Start Portable.bat", "to": "../Start Portable.bat" },
+      { "from": "Start Portable.ps1", "to": "../Start Portable.ps1" }
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-packager . AEGIS --platform=win32 --arch=x64 --icon=logo.ico --out=dist --overwrite",
+    "portable": "node create-logo.js && electron-builder --win portable",
+    "installer": "node create-logo.js && electron-builder --win nsis",
+    "release": "node create-logo.js && electron-builder --win portable && electron-builder --win nsis",
+    "create-logo": "node create-logo.js",
+    "prebuild": "node create-logo.js",
+    "clean": "Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.0.0",
+    "electron-packager": "^17.1.2",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.35.1"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.1"
+  }
+}

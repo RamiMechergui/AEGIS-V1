@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+:root {
+  --bg: #08080e;
+  --surface: #0e0e16;
+  --surface2: #15151f;
+  --surface3: #1c1c2a;
+  --border: rgba(255,255,255,0.035);
+  --border2: rgba(255,255,255,0.06);
+  --text: #dfdfe8;
+  --text2: #85859a;
+  --text3: #55556a;
+  --blue: #4a8bc5;
+  --blue-hover: #5a9bd5;
+  --blue-bg: rgba(74,139,197,0.07);
+  --green: #48bb78;
+  --green-bg: rgba(72,187,120,0.07);
+  --red: #e56a6a;
+  --red-bg: rgba(229,106,106,0.07);
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 8px 40px rgba(0,0,0,0.4);
+  --shadow-lg: 0 12px 56px rgba(0,0,0,0.5);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter','Helvetica Neue',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;overflow:hidden;-webkit-font-smoothing:antialiased;font-size:13.5px}
+.container{width:370px;padding:40px 30px 30px;background:var(--surface);border:1px solid var(--border2);border-radius:16px;text-align:center;box-shadow:var(--shadow-lg);position:relative;overflow:hidden;transition:box-shadow .3s var(--ease-out)}
+.container:hover{box-shadow:0 0 0 1px rgba(74,139,197,0.06),var(--shadow-lg)}
+.container::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--purple,var(--blue)))}
+.logo-icon{margin-bottom:8px}
+.logo-icon svg{width:34px;height:34px}
+h1{font-size:28px;font-weight:200;letter-spacing:4px;margin-bottom:1px;color:var(--text)}
+.tagline{font-size:10px;color:var(--green);margin-bottom:26px;letter-spacing:0.3px}
+.input-group{margin-bottom:14px;text-align:left}
+label{display:block;font-size:8.5px;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:1.2px;font-weight:500}
+input{width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;outline:none;transition:border-color .2s var(--ease-out),box-shadow .2s var(--ease-out),background .2s var(--ease-out)}
+input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(74,139,197,0.08);background:var(--surface2)}
+input::placeholder{color:var(--text3)}
+.btn-row{display:flex;gap:8px;margin-top:20px}
+.btn{flex:1;padding:9px;border:none;border-radius:var(--radius);font-size:12px;cursor:pointer;font-weight:500;transition:all .2s var(--ease-out)}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:var(--blue-hover);transform:translateY(-1px);box-shadow:0 4px 16px rgba(74,139,197,0.25)}
+.btn-primary:active{transform:translateY(0)}
+.btn-secondary{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--surface3);color:var(--text)}
+.guest-btn{display:block;width:100%;margin-top:10px;padding:7px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text3);font-size:10.5px;cursor:pointer;transition:all .15s var(--ease-out)}
+.guest-btn:hover{background:var(--red-bg);border-color:rgba(229,106,106,0.15);color:var(--red)}
+.error{color:var(--red);font-size:10.5px;margin-top:6px;min-height:16px;transition:color .2s}
+.success{color:var(--green);font-size:10.5px;margin-top:6px}
+.toggle-link{color:var(--blue);font-size:10.5px;cursor:pointer;margin-top:14px;display:inline-block;transition:color .15s var(--ease-out)}
+.toggle-link:hover{color:var(--blue-hover)}
+.hidden{display:none}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+#login-form, #register-form{animation:fadeIn .3s var(--ease-out)}
+
+/* ── Noise Overlay ── */
+body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;opacity:0.02;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-repeat:repeat;background-size:128px 128px;mix-blend-mode:overlay}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo-icon">
+    <img src="logo.png" style="display:none;width:38px;height:38px;border-radius:8px" id="logo-img" onload="this.style.display='inline';document.getElementById('logo-svg').style.display='none'" onerror="this.style.display='none'">
+    <svg id="logo-svg" viewBox="0 0 24 24" fill="none" stroke="#4a8bc5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px">
+      <path d="M12 3a7 7 0 0 0-7 7c0 3.5 2 6.5 4 8.5a5 5 0 0 0 6 0c2-2 4-5 4-8.5a7 7 0 0 0-7-7z"/>
+      <circle cx="9" cy="10" r="1" fill="#4a8bc5" stroke="none"/>
+      <circle cx="15" cy="10" r="1" fill="#4a8bc5" stroke="none"/>
+      <path d="M9 14c.5.5 1.5 1 3 1s2.5-.5 3-1" stroke-width="1.2"/>
+    </svg>
+  </div>
+  <h1>AEGIS</h1>
+  <div class="tagline">&#128737; Private browser with user profiles</div>
+
+  <div id="login-form">
+    <div class="input-group">
+      <label>Pseudonym</label>
+      <input id="login-pseudo" type="text" placeholder="Your username" autofocus>
+    </div>
+    <div class="input-group">
+      <label>Password</label>
+      <input id="login-pass" type="password" placeholder="Enter password">
+    </div>
+    <div id="login-error" class="error"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="login-btn">Sign In</button>
+    </div>
+    <button class="guest-btn" id="guest-btn">Login without password</button>
+    <button class="guest-btn" id="quit-btn">Quit</button>
+    <span class="toggle-link" id="show-register">Create a new account</span>
+  </div>
+
+  <div id="register-form" class="hidden">
+    <div class="input-group">
+      <label>Pseudonym</label>
+      <input id="reg-pseudo" type="text" placeholder="Choose a username">
+    </div>
+    <div class="input-group">
+      <label>Password</label>
+      <input id="reg-pass" type="password" placeholder="Choose a password">
+    </div>
+    <div class="input-group">
+      <label>Confirm Password</label>
+      <input id="reg-pass2" type="password" placeholder="Repeat password">
+    </div>
+    <div id="reg-error" class="error"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="reg-cancel">Back</button>
+      <button class="btn btn-primary" id="reg-btn">Register</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const g = window.ghost;
+function showLogin() { document.getElementById('login-form').classList.remove('hidden'); document.getElementById('register-form').classList.add('hidden'); document.getElementById('login-error').textContent = ''; }
+function showRegister() { document.getElementById('login-form').classList.add('hidden'); document.getElementById('register-form').classList.remove('hidden'); document.getElementById('reg-error').textContent = ''; }
+document.getElementById('show-register').onclick = showRegister;
+document.getElementById('reg-cancel').onclick = showLogin;
+document.getElementById('login-btn').onclick = async () => {
+  const pseudo = document.getElementById('login-pseudo').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!pseudo || !password) { errEl.textContent = 'Fill in all fields.'; return; }
+  const result = await g.login(pseudo, password);
+  if (result.ok) { g.enterBrowser(); }
+  else { errEl.textContent = result.error; }
+};
+document.getElementById('reg-btn').onclick = async () => {
+  const pseudo = document.getElementById('reg-pseudo').value.trim();
+  const pass = document.getElementById('reg-pass').value;
+  const pass2 = document.getElementById('reg-pass2').value;
+  const errEl = document.getElementById('reg-error');
+  errEl.textContent = '';
+  if (!pseudo || !pass || !pass2) { errEl.textContent = 'Fill in all fields.'; return; }
+  if (pass !== pass2) { errEl.textContent = 'Passwords do not match.'; return; }
+  const result = await g.register(pseudo, pass);
+  if (result.ok) { errEl.className = 'success'; errEl.textContent = 'Account created! You can now sign in.'; document.getElementById('login-pseudo').value = pseudo; setTimeout(showLogin, 1500); }
+  else { errEl.textContent = result.error; }
+};
+document.getElementById('quit-btn').onclick = () => g.quitApp();
+document.getElementById('guest-btn').onclick = async () => {
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = 'Wiping all data\u2026';
+  const result = await g.loginGuest();
+  if (result.ok) { g.enterBrowser(); }
+  else { errEl.textContent = 'Error: ' + result.error; }
+};
+document.getElementById('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('login-btn').click(); });
+document.getElementById('reg-pass2').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('reg-btn').click(); });
+</script>
+</body>
+</html>

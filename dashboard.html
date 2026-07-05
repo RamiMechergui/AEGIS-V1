@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Time Intelligence Dashboard</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a0a12; --card: #12121e; --card2: #1a1a2e;
+  --text: #e0e0f0; --muted: #8888aa; --border: #2a2a3e;
+  --accent: #6c6cff; --green: #4ade80; --red: #f87171;
+  --orange: #fbbf24; --blue: #60a5fa; --purple: #a78bfa;
+  --pink: #f472b6; --teal: #2dd4bf;
+}
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; min-height: 100vh; overflow-x: hidden; }
+.nav { display: flex; align-items: center; gap: 12px; padding: 16px 24px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+.nav h1 { font-size: 18px; font-weight: 600; flex: 1; }
+.nav button { background: var(--card2); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; transition: .15s; }
+.nav button:hover { background: var(--border); }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.grid { display: grid; gap: 16px; }
+.row { display: flex; gap: 16px; flex-wrap: wrap; }
+.col { flex: 1; min-width: 200px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.card h2 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.card .val { font-size: 28px; font-weight: 700; }
+.card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.stat-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.stat-row .card { flex: 1; min-width: 140px; }
+.stat-row .card .val { font-size: 22px; }
+.gauge-wrap { position: relative; width: 160px; height: 160px; margin: 0 auto; }
+.gauge-wrap canvas { width: 100%; height: 100%; }
+.gauge-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; }
+.gauge-label .num { font-size: 32px; font-weight: 700; }
+.gauge-label .lbl { font-size: 11px; color: var(--muted); }
+.chart-wrap { width: 100%; max-width: 280px; margin: 0 auto; }
+.chart-wrap canvas { width: 100%; height: auto; }
+canvas { max-width: 100%; }
+.site-list { list-style: none; }
+.site-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.site-list li:last-child { border-bottom: none; }
+.site-list .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.site-list .name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-list .time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.site-list .visits { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.insights { display: flex; flex-direction: column; gap: 8px; }
+.insight { background: var(--card2); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.5; }
+.insight.good { border-left-color: var(--green); }
+.insight.warn { border-left-color: var(--orange); }
+.insight .icon { margin-right: 8px; }
+.hbar { display: flex; align-items: center; gap: 4px; height: 24px; }
+.hbar .seg { height: 100%; border-radius: 3px; min-width: 2px; transition: .3s; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.legend-item .swatch { width: 10px; height: 10px; border-radius: 3px; }
+.hourly-chart { height: 120px; display: flex; align-items: flex-end; gap: 3px; margin-top: 8px; }
+.hourly-bar { flex: 1; border-radius: 4px 4px 0 0; min-height: 2px; position: relative; cursor: pointer; transition: .2s; }
+.hourly-bar:hover { opacity: .8; transform: scaleY(1.05); transform-origin: bottom; }
+.week-chart { height: 100px; display: flex; align-items: flex-end; gap: 8px; margin-top: 8px; }
+.week-bar { flex: 1; border-radius: 4px 4px 0 0; min-height: 4px; position: relative; display: flex; flex-direction: column; align-items: center; }
+.week-bar .day-label { font-size: 10px; color: var(--muted); margin-top: 6px; }
+.week-bar .day-val { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty-state svg { width: 48px; height: 48px; opacity: .3; margin-bottom: 12px; }
+.empty-state h3 { font-size: 16px; margin-bottom: 6px; color: var(--text); }
+.empty-state p { font-size: 13px; }
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border); transition: .3s; border-radius: 22px; }
+.slider:before { content: ''; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; transition: .3s; border-radius: 50%; }
+input:checked+.slider { background: var(--accent); }
+input:checked+.slider:before { transform: translateX(18px); }
+.mt-12 { margin-top: 12px; }
+.mb-16 { margin-bottom: 16px; }
+.flex { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 768px) { .stat-row .card { min-width: 100%; } .row { flex-direction: column; } }
+</style>
+</head>
+<body>
+<div class="nav">
+  <button onclick="window.close()">&larr; Back to Browser</button>
+  <h1>Time Intelligence</h1>
+  <div class="toggle-wrap" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+    <span>Analytics</span>
+    <label class="switch"><input type="checkbox" id="analyticsToggle" checked onchange="toggleAnalytics(this.checked)"><span class="slider"></span></label>
+  </div>
+  <button onclick="refreshAll()" title="Refresh">&#x21bb;</button>
+</div>
+
+<div class="container">
+
+  <!-- Today Stats -->
+  <div class="stat-row mb-16" id="todayStats">
+    <div class="card"><h2>Active Time</h2><div class="val" id="todayTime">--</div><div class="sub">today</div></div>
+    <div class="card"><h2>Pages Visited</h2><div class="val" id="todayPages">--</div><div class="sub">sites explored</div></div>
+    <div class="card"><h2>Sessions</h2><div class="val" id="todaySessions">--</div><div class="sub">browsing sessions</div></div>
+    <div class="card"><h2>Workspaces</h2><div class="val" id="todayWorkspaces">--</div><div class="sub">used today</div></div>
+  </div>
+
+  <!-- Gauges + Categories -->
+  <div class="row mb-16">
+    <div class="col">
+      <div class="card">
+        <h2>Focus Score</h2>
+        <div class="gauge-wrap"><canvas id="focusGauge" width="320" height="320"></canvas><div class="gauge-label"><div class="num" id="focusNum">--</div><div class="lbl">focus</div></div></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h2>Productivity</h2>
+        <div class="gauge-wrap"><canvas id="prodGauge" width="320" height="320"></canvas><div class="gauge-label"><div class="num" id="prodNum">--</div><div class="lbl">productivity</div></div></div>
+      </div>
+    </div>
+    <div class="col" style="flex:1.5">
+      <div class="card">
+        <h2>Activity by Category</h2>
+        <div class="flex" style="justify-content:center;gap:16px;flex-wrap:wrap">
+          <div class="chart-wrap"><canvas id="catDonut" width="280" height="280"></canvas></div>
+          <div id="catLegend" class="legend" style="flex-direction:column;gap:6px;margin-top:0"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hourly + Top Sites -->
+  <div class="row mb-16">
+    <div class="col" style="flex:1.5">
+      <div class="card">
+        <h2>Hourly Activity</h2>
+        <div class="hourly-chart" id="hourlyChart"></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h2>Top Sites Today</h2>
+        <ul class="site-list" id="todaySites"><li class="empty-state" style="padding:16px">No data yet</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Workspace + Insights + Trends (grid) -->
+  <div class="row mb-16">
+    <div class="col">
+      <div class="card">
+        <h2>Workspace Breakdown</h2>
+        <ul class="site-list" id="wsBreakdown"><li class="empty-state" style="padding:16px">No workspace data</li></ul>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h2>Daily Trend</h2>
+        <div class="week-chart" id="weekChart"><div style="color:var(--muted);font-size:12px;text-align:center;width:100%;padding:20px">No weekly data yet</div></div>
+      </div>
+    </div>
+    <div class="col" style="flex:1.2">
+      <div class="card">
+        <h2>Insights</h2>
+        <div class="insights" id="todayInsights"><div class="insight">Start browsing to see insights about your time.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Week summary + All-time stats + Data management -->
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <h2>This Week</h2>
+        <div class="stat-row" style="margin-top:8px">
+          <div style="flex:1;min-width:80px"><div style="font-size:11px;color:var(--muted)">Time</div><div style="font-size:16px;font-weight:600" id="weekTime">--</div></div>
+          <div style="flex:1;min-width:80px"><div style="font-size:11px;color:var(--muted)">Best Day</div><div style="font-size:16px;font-weight:600" id="weekBestDay">--</div></div>
+          <div style="flex:1;min-width:80px"><div style="font-size:11px;color:var(--muted)">Avg Daily</div><div style="font-size:16px;font-weight:600" id="weekAvg">--</div></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h2>All Time</h2>
+        <div class="stat-row" style="margin-top:8px">
+          <div style="flex:1;min-width:80px"><div style="font-size:11px;color:var(--muted)">Total Time</div><div style="font-size:16px;font-weight:600" id="allTime">--</div></div>
+          <div style="flex:1;min-width:80px"><div style="font-size:11px;color:var(--muted)">Visits</div><div style="font-size:16px;font-weight:600" id="allVisits">--</div></div>
+          <div style="flex:1;min-width:80px"><div style="font-size:11px;color:var(--muted)">Sessions</div><div style="font-size:16px;font-weight:600" id="allSessions">--</div></div>
+          <div style="flex:1;min-width:80px"><div style="font-size:11px;color:var(--muted)">Avg Session</div><div style="font-size:16px;font-weight:600" id="allAvgSession">--</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="col" style="flex:0.8">
+      <div class="card" style="height:100%;display:flex;flex-direction:column;justify-content:center">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">All analytics data is stored locally on this device.</p>
+        <button onclick="deleteAllData()" style="background:var(--red);color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px">Delete All Analytics Data</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CAT_COLORS = {
+  'Social Media': '#f87171', 'Video & Streaming': '#fbbf24', 'News & Articles': '#60a5fa',
+  'Productivity': '#4ade80', 'Learning': '#a78bfa', 'Shopping': '#f472b6',
+  'Entertainment': '#2dd4bf', 'General Browsing': '#8888aa', 'Uncategorized': '#6b7280'
+};
+const CAT_ORDER = ['Productivity','Learning','General Browsing','News & Articles','Video & Streaming','Social Media','Entertainment','Shopping','Uncategorized'];
+const CAT_ICONS = { 'Productivity':'&#x1f4bb;','Learning':'&#x1f4da;','Social Media':'&#x1f4ac;','Video & Streaming':'&#x1f3ac;','News & Articles':'&#x1f4f0;','Shopping':'&#x1f6d2;','Entertainment':'&#x1f3b5;','General Browsing':'&#x1f310;','Uncategorized':'&#x2753;' };
+
+function formatTime(ms) {
+  if (!ms || ms < 1000) return '0m';
+  const sec = Math.floor(ms / 1000);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm';
+}
+function formatTimeShort(ms) {
+  if (!ms || ms < 60000) return '<1m';
+  const sec = Math.floor(ms / 1000);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return h + 'h' + (m > 0 ? ' ' + m + 'm' : '');
+  return m + 'm';
+}
+
+async function refreshAll() {
+  try {
+    await Promise.all([loadToday(), loadWeek(), loadAll()]);
+  } catch(e) { console.error('Dashboard error:', e); }
+}
+
+async function loadToday() {
+  const data = await window.ghost.getAnalyticsToday();
+  if (!data) return;
+  const d = data.daily || {};
+  document.getElementById('todayTime').textContent = formatTime(d.total_active_time);
+  document.getElementById('todayPages').textContent = d.total_pages_visited || 0;
+  document.getElementById('todaySessions').textContent = data.sessions || 0;
+  document.getElementById('todayWorkspaces').textContent = d.workspaces_used || 0;
+  document.getElementById('focusNum').textContent = (d.focus_score != null ? d.focus_score : '--');
+  document.getElementById('prodNum').textContent = (d.productivity_score != null ? d.productivity_score : '--');
+  drawGauge('focusGauge', (d.focus_score || 0) / 100, '#60a5fa');
+  drawGauge('prodGauge', (d.productivity_score || 0) / 100, '#4ade80');
+  renderDonut('catDonut', 'catLegend', data.catDist || []);
+  renderTopSites('todaySites', data.topSites || []);
+  renderWsBreakdown(data.wsBreakdown || []);
+  renderHourly(data.hourlyBuckets || []);
+  renderInsights(data);
+}
+
+async function loadWeek() {
+  const data = await window.ghost.getAnalyticsWeekly();
+  if (!data) return;
+  const days = data.daily || [];
+  const total = days.reduce((s, d) => s + (d.total_active_time || 0), 0);
+  const bestDay = days.length ? days.reduce((a, b) => ((a.focus_score||0) > (b.focus_score||0) ? a : b)) : null;
+  const avg = days.length ? total / days.length : 0;
+  document.getElementById('weekTime').textContent = formatTime(total);
+  document.getElementById('weekBestDay').textContent = bestDay ? bestDay.date.slice(5) : '--';
+  document.getElementById('weekAvg').textContent = formatTime(avg);
+  renderWeekChart(days);
+}
+
+async function loadAll() {
+  const data = await window.ghost.getAnalyticsAllTime();
+  if (!data) return;
+  document.getElementById('allTime').textContent = formatTime(data.totalTime);
+  document.getElementById('allVisits').textContent = data.totalVisits || 0;
+  document.getElementById('allSessions').textContent = data.sessions ? data.sessions.c || 0 : 0;
+  document.getElementById('allAvgSession').textContent = data.sessions ? formatTimeShort(data.sessions.avg || 0) : '0m';
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+function renderDonut(canvasId, legendId, catDist) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height, cx = w/2, cy = h/2, r = Math.min(cx, cy) - 10;
+  ctx.clearRect(0, 0, w, h);
+  const legend = document.getElementById(legendId);
+  if (!catDist || catDist.length === 0) {
+    ctx.fillStyle = '#2a2a3e'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+    legend.innerHTML = '<span style="color:var(--muted);font-size:12px">No data</span>';
+    return;
+  }
+  const total = catDist.reduce((s, c) => s + (c.total || 0), 0);
+  if (total === 0) return;
+  const sorted = [...catDist].sort((a, b) => (b.total||0) - (a.total||0));
+  let start = -Math.PI / 2;
+  sorted.forEach(c => {
+    const frac = (c.total || 0) / total;
+    const end = start + frac * Math.PI * 2;
+    ctx.beginPath(); ctx.arc(cx, cy, r, start, end); ctx.arc(cx, cy, r * 0.55, end, start, true); ctx.closePath();
+    ctx.fillStyle = CAT_COLORS[c.category] || '#6b7280';
+    ctx.fill();
+    start = end;
+  });
+  legend.innerHTML = sorted.map(c => {
+    const pct = Math.round((c.total || 0) / total * 100);
+    return `<div class="legend-item"><span class="swatch" style="background:${CAT_COLORS[c.category]||'#6b7280'}"></span>${escHtml(c.category)} <span style="color:var(--text)">${pct}%</span></div>`;
+  }).join('');
+}
+
+function drawGauge(id, frac, color) {
+  const canvas = document.getElementById(id);
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height, cx = w/2, cy = h/2, r = Math.min(cx, cy) - 20, lw = 16;
+  ctx.clearRect(0, 0, w, h);
+  // background arc
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0.75 * Math.PI, 2.25 * Math.PI); ctx.strokeStyle = '#2a2a3e'; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
+  // value arc
+  const val = Math.max(0, Math.min(1, frac));
+  const end = 0.75 * Math.PI + val * 1.5 * Math.PI;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0.75 * Math.PI, end); ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
+}
+
+function renderTopSites(id, sites) {
+  const el = document.getElementById(id);
+  if (!sites || sites.length === 0) { el.innerHTML = '<li class="empty-state" style="padding:16px">No data yet</li>'; return; }
+  el.innerHTML = sites.map(s => {
+    const c = CAT_COLORS[s.category] || '#6b7280';
+    const title = s.title || s.domain;
+    return `<li><span class="dot" style="background:${c}"></span><span class="name">${escHtml(title).slice(0, 50)}</span><span class="visits">${s.visits||0} visits</span><span class="time">${formatTimeShort(s.total)}</span></li>`;
+  }).join('');
+}
+
+function renderWsBreakdown(wss) {
+  const el = document.getElementById('wsBreakdown');
+  if (!wss || wss.length === 0) { el.innerHTML = '<li class="empty-state" style="padding:16px">No workspace data</li>'; return; }
+  el.innerHTML = wss.map(w => {
+    const totalMs = w.total || 0;
+    return `<li><span class="dot" style="background:var(--accent)"></span><span class="name">${escHtml(w.name||w.workspace_id||'default')}</span><span class="time">${formatTimeShort(totalMs)}</span></li>`;
+  }).join('');
+}
+
+function renderHourly(buckets) {
+  const el = document.getElementById('hourlyChart');
+  if (!buckets || buckets.length === 0) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;width:100%;padding:20px">No hourly data yet</div>'; return; }
+  const max = Math.max(...buckets.map(b => b.total || 0), 1);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const bars = [];
+  for (let h = 0; h < 24; h++) {
+    const bucket = buckets.find(b => b.hour === h);
+    const val = bucket ? (bucket.total || 0) : 0;
+    const ht = Math.max(2, (val / max) * 100);
+    bars.push({ hour: h, val, ht });
+  }
+  el.innerHTML = bars.map(b => {
+    const label = b.hour.toString().padStart(2, '0') + ':00';
+    const amt = b.val > 0 ? formatTimeShort(b.val) : '';
+    return `<div class="hourly-bar" style="height:${b.ht}%;background:var(--accent);opacity:${b.val > 0 ? 0.7 + (b.val/max)*0.3 : 0.1}" title="${label} - ${amt||'no activity'}"></div>`;
+  }).join('');
+}
+
+function renderWeekChart(days) {
+  const el = document.getElementById('weekChart');
+  if (!days || days.length === 0) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;width:100%;padding:20px">No weekly data yet</div>'; return; }
+  const max = Math.max(...days.map(d => d.total_active_time || 0), 1);
+  el.innerHTML = days.map(d => {
+    const ht = Math.max(4, ((d.total_active_time || 0) / max) * 100);
+    const label = d.date.slice(5);
+    return `<div class="week-bar"><div class="day-val">${formatTimeShort(d.total_active_time)}</div><div style="width:100%;background:var(--accent);height:${ht}px;border-radius:4px 4px 0 0;opacity:${0.5 + (d.total_active_time/max)*0.5}"></div><div class="day-label">${label}</div></div>`;
+  }).join('');
+}
+
+function renderInsights(data) {
+  const el = document.getElementById('todayInsights');
+  const d = data.daily || {};
+  const insights = [];
+  const total = d.total_active_time || 0;
+  const focus = d.focus_score || 0;
+  const prod = d.productivity_score || 0;
+  const social = d.social_media_time || 0;
+  const learning = d.learning_time || 0;
+  if (total === 0) { el.innerHTML = '<div class="insight">Start browsing to see insights about your time.</div>'; return; }
+  if (prod > 60) insights.push({ text: (CAT_ICONS['Productivity']||'') + ' Strong focus on productive tasks today. Keep it up!', cls: 'good' });
+  else if (prod < 20 && total > 600000) insights.push({ text: (CAT_ICONS['General Browsing']||'') + ' Most of your time was general browsing. Try setting a goal for tomorrow.', cls: 'warn' });
+  if (focus > 70) insights.push({ text: (CAT_ICONS['Learning']||'') + ' High focus score! You maintained excellent concentration today.', cls: 'good' });
+  else if (focus < 30 && total > 600000) insights.push({ text: (CAT_ICONS['Social Media']||'') + ' Your focus score was low. Consider limiting social media to boost productivity.', cls: 'warn' });
+  if (learning > 10 * 60000) insights.push({ text: (CAT_ICONS['Learning']||'') + ' Great work on learning! You spent ' + formatTimeShort(learning) + ' on educational content.', cls: 'good' });
+  if (social > total * 0.4) insights.push({ text: (CAT_ICONS['Social Media']||'') + ' Social media took up over 40% of your browsing time today.', cls: 'warn' });
+  if (insights.length === 0) insights.push({ text: (CAT_ICONS['General Browsing']||'') + ' You spent ' + formatTimeShort(total) + ' browsing today.', cls: '' });
+  el.innerHTML = insights.map(i => `<div class="insight ${i.cls}">${i.text}</div>`).join('');
+}
+
+async function toggleAnalytics(enabled) {
+  await window.ghost.analyticsToggle(enabled);
+}
+
+async function deleteAllData() {
+  if (!confirm('Delete all analytics data? This cannot be undone.')) return;
+  await window.ghost.analyticsDeleteAll();
+  refreshAll();
+}
+
+// Init
+(async function init() {
+  const status = await window.ghost.getAnalyticsStatus();
+  if (status) document.getElementById('analyticsToggle').checked = status.enabled;
+  refreshAll();
+  // Auto-refresh every 30s
+  setInterval(refreshAll, 30000);
+})();
+</script>
+</body>
+</html>

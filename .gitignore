@@ -1,0 +1,14 @@
+# Portable user data
+data/*
+!data/.gitkeep
+data/session/*
+
+# Build output
+dist/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
