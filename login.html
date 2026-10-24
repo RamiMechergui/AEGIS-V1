@@ -2,156 +2,251 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<title>AEGIS — Sign In</title>
 <style>
 :root {
-  --bg: #08080e;
-  --surface: #0e0e16;
-  --surface2: #15151f;
-  --surface3: #1c1c2a;
-  --border: rgba(255,255,255,0.035);
-  --border2: rgba(255,255,255,0.06);
-  --text: #dfdfe8;
-  --text2: #85859a;
-  --text3: #55556a;
-  --blue: #4a8bc5;
-  --blue-hover: #5a9bd5;
-  --blue-bg: rgba(74,139,197,0.07);
-  --green: #48bb78;
-  --green-bg: rgba(72,187,120,0.07);
-  --red: #e56a6a;
-  --red-bg: rgba(229,106,106,0.07);
-  --radius: 8px;
-  --radius-sm: 6px;
-  --shadow: 0 8px 40px rgba(0,0,0,0.4);
-  --shadow-lg: 0 12px 56px rgba(0,0,0,0.5);
-  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --bg: #06060f;
+  --surface: rgba(14,14,24,0.85);
+  --surface2: #111120;
+  --border: rgba(255,255,255,0.05);
+  --border2: rgba(255,255,255,0.1);
+  --text: #e8e8f0;
+  --text2: #8080a0;
+  --text3: #505070;
+  --blue: #5b9bd8;
+  --blue-hover: #6eaee8;
+  --blue-glow: rgba(91,155,216,0.2);
+  --green: #4ecc82;
+  --red: #e86868;
+  --ease: cubic-bezier(0.4,0,0.2,1);
+  --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter','Helvetica Neue',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;overflow:hidden;-webkit-font-smoothing:antialiased;font-size:13.5px}
-.container{width:370px;padding:40px 30px 30px;background:var(--surface);border:1px solid var(--border2);border-radius:16px;text-align:center;box-shadow:var(--shadow-lg);position:relative;overflow:hidden;transition:box-shadow .3s var(--ease-out)}
-.container:hover{box-shadow:0 0 0 1px rgba(74,139,197,0.06),var(--shadow-lg)}
-.container::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--purple,var(--blue)))}
-.logo-icon{margin-bottom:8px}
-.logo-icon svg{width:34px;height:34px}
-h1{font-size:28px;font-weight:200;letter-spacing:4px;margin-bottom:1px;color:var(--text)}
-.tagline{font-size:10px;color:var(--green);margin-bottom:26px;letter-spacing:0.3px}
-.input-group{margin-bottom:14px;text-align:left}
-label{display:block;font-size:8.5px;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:1.2px;font-weight:500}
-input{width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;outline:none;transition:border-color .2s var(--ease-out),box-shadow .2s var(--ease-out),background .2s var(--ease-out)}
-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(74,139,197,0.08);background:var(--surface2)}
-input::placeholder{color:var(--text3)}
-.btn-row{display:flex;gap:8px;margin-top:20px}
-.btn{flex:1;padding:9px;border:none;border-radius:var(--radius);font-size:12px;cursor:pointer;font-weight:500;transition:all .2s var(--ease-out)}
-.btn-primary{background:var(--blue);color:#fff}
-.btn-primary:hover{background:var(--blue-hover);transform:translateY(-1px);box-shadow:0 4px 16px rgba(74,139,197,0.25)}
-.btn-primary:active{transform:translateY(0)}
-.btn-secondary{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
-.btn-secondary:hover{background:var(--surface3);color:var(--text)}
-.guest-btn{display:block;width:100%;margin-top:10px;padding:7px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text3);font-size:10.5px;cursor:pointer;transition:all .15s var(--ease-out)}
-.guest-btn:hover{background:var(--red-bg);border-color:rgba(229,106,106,0.15);color:var(--red)}
-.error{color:var(--red);font-size:10.5px;margin-top:6px;min-height:16px;transition:color .2s}
-.success{color:var(--green);font-size:10.5px;margin-top:6px}
-.toggle-link{color:var(--blue);font-size:10.5px;cursor:pointer;margin-top:14px;display:inline-block;transition:color .15s var(--ease-out)}
-.toggle-link:hover{color:var(--blue-hover)}
-.hidden{display:none}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-#login-form, #register-form{animation:fadeIn .3s var(--ease-out)}
+html,body{
+  height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);color:var(--text);
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;-webkit-font-smoothing:antialiased;
+}
 
-/* ── Noise Overlay ── */
-body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;opacity:0.02;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-repeat:repeat;background-size:128px 128px;mix-blend-mode:overlay}
+/* ── Animated background ── */
+.bg-orbs{position:fixed;inset:0;pointer-events:none;z-index:0}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.12;animation:drift 12s ease-in-out infinite}
+.orb1{width:400px;height:400px;background:#4a8bc5;top:-100px;left:-100px;animation-delay:0s}
+.orb2{width:350px;height:350px;background:#7a5db5;bottom:-80px;right:-80px;animation-delay:-4s}
+.orb3{width:250px;height:250px;background:#48bb78;top:40%;left:60%;animation-delay:-8s}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(30px,-20px) scale(1.05)}66%{transform:translate(-20px,30px) scale(0.97)}}
+
+/* ── Grid noise ── */
+body::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.025;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat:repeat;background-size:128px 128px}
+
+/* ── Card ── */
+.card{
+  position:relative;z-index:2;
+  width:420px;max-width:calc(100vw - 32px);
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:20px;
+  padding:44px 40px 36px;
+  box-shadow:0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  animation:cardIn .5s var(--ease) both;
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(24px) scale(0.97)}to{opacity:1;transform:none}}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:20px 20px 0 0;
+  background:linear-gradient(90deg,#4a8bc5,#7a5db5,#48bb78,#4a8bc5);background-size:300% 100%;
+  animation:shimmer 4s linear infinite}
+@keyframes shimmer{0%{background-position:0% 0}100%{background-position:300% 0}}
+
+/* ── Logo ── */
+.logo{display:flex;flex-direction:column;align-items:center;margin-bottom:32px}
+.logo-mark{width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,rgba(74,139,197,0.15),rgba(122,93,181,0.15));
+  border:1px solid rgba(74,139,197,0.2);display:flex;align-items:center;justify-content:center;margin-bottom:14px;
+  box-shadow:0 0 40px rgba(74,139,197,0.1)}
+.logo h1{font-size:26px;font-weight:600;letter-spacing:6px;color:var(--text);margin-bottom:4px}
+.logo-sub{font-size:10.5px;color:var(--green);letter-spacing:0.5px;font-weight:400;opacity:0.8}
+
+/* ── Forms ── */
+.form-group{margin-bottom:16px}
+label{display:block;font-size:10px;font-weight:500;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+.input-wrap{position:relative;display:flex;align-items:center}
+.input-wrap svg{position:absolute;left:12px;width:14px;height:14px;color:var(--text3);pointer-events:none;transition:color .2s}
+input{
+  width:100%;padding:10px 12px 10px 36px;
+  background:rgba(255,255,255,0.04);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;
+  outline:none;transition:all .2s var(--ease);
+}
+input:focus{border-color:var(--blue);background:rgba(91,155,216,0.06);box-shadow:0 0 0 3px var(--blue-glow)}
+input:focus ~ svg, .input-wrap:focus-within svg{color:var(--blue)}
+input::placeholder{color:var(--text3)}
+
+/* ── Buttons ── */
+.btn-row{display:flex;gap:8px;margin-top:22px}
+.btn{flex:1;padding:11px;border:none;border-radius:10px;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:500;transition:all .2s var(--ease);letter-spacing:0.2px}
+.btn-primary{background:linear-gradient(135deg,var(--blue),#6a6ad8);color:#fff;box-shadow:0 4px 20px rgba(91,155,216,0.25)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(91,155,216,0.35)}
+.btn-primary:active{transform:translateY(0)}
+.btn-secondary{background:rgba(255,255,255,0.05);color:var(--text2);border:1px solid var(--border)}
+.btn-secondary:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.guest-btn{
+  display:block;width:100%;margin-top:10px;padding:9px;
+  border:1px solid var(--border);border-radius:10px;
+  background:transparent;color:var(--text3);font-size:11px;font-family:inherit;
+  cursor:pointer;transition:all .15s var(--ease);text-align:center;
+}
+.guest-btn:hover{background:rgba(232,104,104,0.07);border-color:rgba(232,104,104,0.2);color:var(--red)}
+.quit-btn{background:transparent;border:none;color:var(--text3);font-size:10.5px;font-family:inherit;
+  cursor:pointer;display:block;margin:8px auto 0;padding:4px 8px;border-radius:6px;transition:color .15s}
+.quit-btn:hover{color:var(--text2)}
+
+/* ── Messages ── */
+.error{color:var(--red);font-size:10.5px;margin-top:8px;min-height:16px;line-height:1.4;transition:all .2s}
+.success{color:var(--green);font-size:10.5px;margin-top:8px}
+.toggle-link{color:var(--blue);font-size:11px;cursor:pointer;margin-top:16px;display:inline-block;transition:color .15s;font-weight:500}
+.toggle-link:hover{color:var(--blue-hover)}
+.toggle-link-wrap{text-align:center;margin-top:16px;font-size:11px;color:var(--text3)}
+
+/* ── Divider ── */
+.divider{display:flex;align-items:center;gap:12px;margin:18px 0 0;color:var(--text3);font-size:10px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── Transitions ── */
+.hidden{display:none}
+.form-wrap{animation:fadeUp .25s var(--ease) both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="logo-icon">
-    <img src="logo.png" style="display:none;width:38px;height:38px;border-radius:8px" id="logo-img" onload="this.style.display='inline';document.getElementById('logo-svg').style.display='none'" onerror="this.style.display='none'">
-    <svg id="logo-svg" viewBox="0 0 24 24" fill="none" stroke="#4a8bc5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px">
-      <path d="M12 3a7 7 0 0 0-7 7c0 3.5 2 6.5 4 8.5a5 5 0 0 0 6 0c2-2 4-5 4-8.5a7 7 0 0 0-7-7z"/>
-      <circle cx="9" cy="10" r="1" fill="#4a8bc5" stroke="none"/>
-      <circle cx="15" cy="10" r="1" fill="#4a8bc5" stroke="none"/>
-      <path d="M9 14c.5.5 1.5 1 3 1s2.5-.5 3-1" stroke-width="1.2"/>
-    </svg>
-  </div>
-  <h1>AEGIS</h1>
-  <div class="tagline">&#128737; Private browser with user profiles</div>
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
 
-  <div id="login-form">
-    <div class="input-group">
-      <label>Pseudonym</label>
-      <input id="login-pseudo" type="text" placeholder="Your username" autofocus>
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">
+      <img src="logo.png" style="display:none;width:32px;height:32px;border-radius:8px" id="logo-img"
+        onload="this.style.display='inline';document.getElementById('logo-svg').style.display='none'"
+        onerror="this.style.display='none'">
+      <svg id="logo-svg" viewBox="0 0 24 24" fill="none" stroke="#5b9bd8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px">
+        <path d="M12 3a7 7 0 0 0-7 7c0 3.5 2 6.5 4 8.5a5 5 0 0 0 6 0c2-2 4-5 4-8.5a7 7 0 0 0-7-7z"/>
+        <circle cx="9" cy="10" r="1" fill="#5b9bd8" stroke="none"/>
+        <circle cx="15" cy="10" r="1" fill="#5b9bd8" stroke="none"/>
+        <path d="M9 14c.5.5 1.5 1 3 1s2.5-.5 3-1" stroke-width="1.2"/>
+      </svg>
     </div>
-    <div class="input-group">
+    <h1>AEGIS</h1>
+    <div class="logo-sub">🛡 Private · Isolated · Secure</div>
+  </div>
+
+  <!-- Login Form -->
+  <div id="login-form" class="form-wrap">
+    <div class="form-group">
+      <label>Username</label>
+      <div class="input-wrap">
+        <input id="login-pseudo" type="text" placeholder="Enter your username" autofocus>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/></svg>
+      </div>
+    </div>
+    <div class="form-group">
       <label>Password</label>
-      <input id="login-pass" type="password" placeholder="Enter password">
+      <div class="input-wrap">
+        <input id="login-pass" type="password" placeholder="Enter your password">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="7" width="10" height="7" rx="2"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>
+      </div>
     </div>
     <div id="login-error" class="error"></div>
     <div class="btn-row">
       <button class="btn btn-primary" id="login-btn">Sign In</button>
     </div>
-    <button class="guest-btn" id="guest-btn">Login without password</button>
-    <button class="guest-btn" id="quit-btn">Quit</button>
-    <span class="toggle-link" id="show-register">Create a new account</span>
+    <div class="divider">or</div>
+    <button class="guest-btn" id="guest-btn">Continue without account</button>
+    <button class="quit-btn" id="quit-btn">Quit AEGIS</button>
+    <div class="toggle-link-wrap">Don't have an account? <span class="toggle-link" id="show-register">Create one</span></div>
   </div>
 
-  <div id="register-form" class="hidden">
-    <div class="input-group">
-      <label>Pseudonym</label>
-      <input id="reg-pseudo" type="text" placeholder="Choose a username">
+  <!-- Register Form -->
+  <div id="register-form" class="form-wrap hidden">
+    <div class="form-group">
+      <label>Choose Username</label>
+      <div class="input-wrap">
+        <input id="reg-pseudo" type="text" placeholder="Pick a username">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/></svg>
+      </div>
     </div>
-    <div class="input-group">
+    <div class="form-group">
       <label>Password</label>
-      <input id="reg-pass" type="password" placeholder="Choose a password">
-    </div>
-    <div class="input-group">
-      <label>Confirm Password</label>
-      <input id="reg-pass2" type="password" placeholder="Repeat password">
+      <div class="input-wrap">
+        <input id="reg-pass" type="password" placeholder="Create a password (min 3 chars)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="7" width="10" height="7" rx="2"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>
+      </div>
     </div>
     <div id="reg-error" class="error"></div>
     <div class="btn-row">
-      <button class="btn btn-secondary" id="reg-cancel">Back</button>
-      <button class="btn btn-primary" id="reg-btn">Register</button>
+      <button class="btn btn-secondary" id="back-btn">Back</button>
+      <button class="btn btn-primary" id="reg-btn">Create Account</button>
     </div>
+    <div class="toggle-link-wrap" style="margin-top:14px">Already have an account? <span class="toggle-link" id="show-login">Sign in</span></div>
   </div>
 </div>
 
 <script>
 const g = window.ghost;
-function showLogin() { document.getElementById('login-form').classList.remove('hidden'); document.getElementById('register-form').classList.add('hidden'); document.getElementById('login-error').textContent = ''; }
-function showRegister() { document.getElementById('login-form').classList.add('hidden'); document.getElementById('register-form').classList.remove('hidden'); document.getElementById('reg-error').textContent = ''; }
-document.getElementById('show-register').onclick = showRegister;
-document.getElementById('reg-cancel').onclick = showLogin;
-document.getElementById('login-btn').onclick = async () => {
-  const pseudo = document.getElementById('login-pseudo').value.trim();
-  const password = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
-  errEl.textContent = '';
-  if (!pseudo || !password) { errEl.textContent = 'Fill in all fields.'; return; }
-  const result = await g.login(pseudo, password);
-  if (result.ok) { g.enterBrowser(); }
-  else { errEl.textContent = result.error; }
+const loginForm = document.getElementById('login-form');
+const regForm = document.getElementById('register-form');
+
+document.getElementById('show-register').onclick = () => {
+  loginForm.classList.add('hidden'); regForm.classList.remove('hidden');
+  regForm.className = 'form-wrap'; // retrigger animation
+  setTimeout(() => document.getElementById('reg-pseudo').focus(), 50);
 };
+document.getElementById('show-login').onclick = () => {
+  regForm.classList.add('hidden'); loginForm.classList.remove('hidden');
+  loginForm.className = 'form-wrap';
+  setTimeout(() => document.getElementById('login-pseudo').focus(), 50);
+};
+document.getElementById('back-btn').onclick = () => document.getElementById('show-login').click();
+
+document.getElementById('login-btn').onclick = async () => {
+  const p = document.getElementById('login-pseudo').value.trim();
+  const pw = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  if (!p || !pw) { err.textContent = 'Please enter username and password.'; return; }
+  const r = await g.login(p, pw);
+  if (r.ok) { window.location.href = 'workspace.html'; }
+  else { err.textContent = r.error || 'Invalid credentials.'; }
+};
+
 document.getElementById('reg-btn').onclick = async () => {
-  const pseudo = document.getElementById('reg-pseudo').value.trim();
-  const pass = document.getElementById('reg-pass').value;
-  const pass2 = document.getElementById('reg-pass2').value;
-  const errEl = document.getElementById('reg-error');
-  errEl.textContent = '';
-  if (!pseudo || !pass || !pass2) { errEl.textContent = 'Fill in all fields.'; return; }
-  if (pass !== pass2) { errEl.textContent = 'Passwords do not match.'; return; }
-  const result = await g.register(pseudo, pass);
-  if (result.ok) { errEl.className = 'success'; errEl.textContent = 'Account created! You can now sign in.'; document.getElementById('login-pseudo').value = pseudo; setTimeout(showLogin, 1500); }
-  else { errEl.textContent = result.error; }
+  const p = document.getElementById('reg-pseudo').value.trim();
+  const pw = document.getElementById('reg-pass').value;
+  const err = document.getElementById('reg-error');
+  err.textContent = '';
+  if (!p || !pw) { err.textContent = 'Please fill in all fields.'; return; }
+  const r = await g.register(p, pw);
+  if (r.ok) {
+    const lr = await g.login(p, pw);
+    if (lr.ok) window.location.href = 'workspace.html';
+  } else { err.textContent = r.error || 'Registration failed.'; }
+};
+
+document.getElementById('guest-btn').onclick = async () => {
+  await g.loginGuest();
+  window.location.href = 'workspace.html';
 };
 document.getElementById('quit-btn').onclick = () => g.quitApp();
-document.getElementById('guest-btn').onclick = async () => {
-  const errEl = document.getElementById('login-error');
-  errEl.textContent = 'Wiping all data\u2026';
-  const result = await g.loginGuest();
-  if (result.ok) { g.enterBrowser(); }
-  else { errEl.textContent = 'Error: ' + result.error; }
-};
-document.getElementById('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('login-btn').click(); });
-document.getElementById('reg-pass2').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('reg-btn').click(); });
+
+// Enter key support
+['login-pseudo','login-pass'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-btn').click(); });
+});
+['reg-pseudo','reg-pass'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('reg-btn').click(); });
+});
 </script>
 </body>
 </html>

@@ -74,11 +74,12 @@ body.chrome-hidden .area { flex: 1; }
 #logo span{font-size:10px;font-weight:500;color:var(--text2);letter-spacing:1px}
 
 /* ── URL Bar ── */
-.url-bar-wrap{display:flex;align-items:center;flex:1;min-width:0}
+.url-bar-wrap{position:relative;display:flex;align-items:stretch;flex:1;min-width:0}
 #url-wrap{position:relative;flex:1;display:flex;min-width:0;align-items:center}
-#url-wrap-right{position:relative;flex:1;display:none;min-width:0;align-items:center}
-#url-wrap-right.open{display:flex}
-#url,#url-right{flex:1;background:transparent;border:none;padding:4px 6px;color:var(--text);font-size:12px;outline:none;height:28px;-webkit-app-region:no-drag;letter-spacing:0.1px;font-weight:400}
+#url-bar-wrap-right{position:relative;flex:1;display:none;min-width:0}
+#url-bar-wrap-right.open{display:flex}
+#url-wrap-right{position:relative;flex:1;display:flex;min-width:0;align-items:center}
+#url,#url-right{flex:1;background:transparent;border:none;padding:4px 8px;color:var(--text);font-size:12px;outline:none;height:28px;-webkit-app-region:no-drag;letter-spacing:0.1px;font-weight:400}
 #url::placeholder,#url-right::placeholder{color:var(--text3)}
 .url-badge{flex-shrink:0;display:flex;align-items:center;height:28px;padding:0 7px 0 10px;font-size:8px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;border-radius:7px 0 0 7px;user-select:none;white-space:nowrap;transition:all .2s var(--ease-out)}
 .url-badge-l{background:var(--blue-bg);color:var(--blue)}
@@ -94,14 +95,17 @@ body.chrome-hidden .area { flex: 1; }
 .uc:hover{border-color:var(--border2);background:var(--surface3)}
 .uc:focus-within{border-color:var(--border3);box-shadow:0 0 0 3px var(--blue-glow);background:var(--surface2)}
 
-/* ── Suggestions ── */
-#suggest,#suggest-right{display:none;position:absolute;top:calc(100% + 5px);left:0;right:0;background:rgba(20,20,30,0.92);border:1px solid var(--border2);border-radius:var(--radius);z-index:100;backdrop-filter:blur(48px);-webkit-backdrop-filter:blur(48px);box-shadow:var(--shadow-lg);overflow:hidden;padding:4px 0;transform:translateY(-6px);opacity:0;transition:transform .2s var(--ease-out),opacity .15s var(--ease-out)}
-#suggest.open,#suggest-right.open{display:block;transform:translateY(0);opacity:1}
-#suggest .si,#suggest-right .si{padding:7px 12px;cursor:pointer;font-size:11.5px;color:var(--text2);display:flex;align-items:center;gap:10px;transition:all .08s}
-#suggest .si:hover,#suggest .si.sel{background:var(--blue-bg);color:var(--text)}
-#suggest-right .si:hover,#suggest-right .si.sel{background:var(--purple-bg);color:var(--text)}
+/* ── Suggestions (dropdown appears BELOW tabs bar, not overlapping it) ── */
+#suggest,#suggest-right{display:none;position:absolute;top:calc(100% + 38px);left:0;right:0;background:#0d0e1b;border:1px solid rgba(255,255,255,0.12);border-radius:10px;z-index:999;-webkit-app-region:no-drag;box-shadow:0 12px 36px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.05) inset;overflow:hidden;padding:5px 0}
+#suggest.open,#suggest-right.open{display:block;animation:fadeSlideIn .15s var(--ease-out)}
+#suggest .si,#suggest-right .si{padding:7px 12px;cursor:pointer;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:9px;transition:all .1s}
+#suggest .si:hover,#suggest .si.sel{background:var(--blue-bg);color:#ffffff}
+#suggest-right .si:hover,#suggest-right .si.sel{background:var(--purple-bg);color:#ffffff}
+#suggest .si-icon,#suggest-right .si-icon{width:13px;height:13px;color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#suggest .si:hover .si-icon,#suggest .si.sel .si-icon{color:var(--blue)}
+#suggest-right .si:hover .si-icon,#suggest-right .si.sel .si-icon{color:var(--purple)}
 #suggest .si .siq,#suggest-right .si .siq{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#suggest .si .sit,#suggest-right .si .sit{font-size:9px;color:var(--text3);flex-shrink:0}
+#suggest .si .sit,#suggest-right .si .sit{font-size:9.5px;color:var(--text3);flex-shrink:0;opacity:0.7}
 
 /* ── Toolbar Items ── */
 #badge{font-size:7px;color:var(--blue);background:var(--blue-bg);border:none;padding:2px 8px;border-radius:var(--radius-pill);white-space:nowrap;flex-shrink:0;letter-spacing:0.8px;text-transform:uppercase;font-weight:600;transition:all .2s var(--ease-out)}
@@ -110,6 +114,13 @@ body.chrome-hidden .area { flex: 1; }
 #bm-btn svg{transition:all .2s var(--ease-spring)}
 #bm-btn.bmd svg{fill:var(--yellow);color:var(--yellow);filter:drop-shadow(0 0 6px var(--yellow-glow))}
 #bm-btn:hover{color:var(--text2)}
+/* ── Take Notes button ── */
+#tb #notes-btn{width:auto;padding:0 9px;gap:5px;height:28px;letter-spacing:0.2px}
+#tb #notes-btn .nb-lbl{font-size:10px;font-weight:450;white-space:nowrap}
+#tb #notes-btn:hover{background:var(--border2);color:var(--text)}
+#tb #notes-btn.active{background:var(--purple-bg);color:var(--purple);box-shadow:inset 0 0 0 1px rgba(122,93,181,0.25)}
+#tb #notes-btn.active:hover{background:var(--purple-bg-hover);color:var(--purple-hover)}
+@media (max-width: 980px){ #tb #notes-btn .nb-lbl{display:none} #tb #notes-btn{width:30px;padding:0} }
 #zoom-lbl{font-size:9px;color:var(--text3);cursor:pointer;transition:color .15s;font-variant-numeric:tabular-nums;width:30px;text-align:right;-webkit-app-region:no-drag;font-weight:450}
 #zoom-lbl:hover{color:var(--text2)}
 #load{display:none;width:12px;height:12px;flex-shrink:0;margin:0 3px}
@@ -211,7 +222,7 @@ body.fs #tabs{border-bottom:1px solid var(--border)}
 #su:empty{opacity:0}
 
 /* ── Panels (slide-in) ── */
-.panel{display:none;position:absolute;top:0;right:0;width:380px;height:100%;background:rgba(12,12,20,0.96);border-left:1px solid var(--border2);z-index:10;flex-direction:column;backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);transform:translateX(20px);opacity:0;transition:transform .25s var(--ease-out),opacity .2s var(--ease-out)}
+.panel{display:none;position:absolute;top:0;right:0;width:380px;height:100%;background:rgba(12,12,20,0.98);border-left:1px solid var(--border2);z-index:10;flex-direction:column;transform:translateX(20px);opacity:0;transition:transform .25s var(--ease-out),opacity .2s var(--ease-out)}
 .panel.open{display:flex;transform:translateX(0);opacity:1}
 .phdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
 .phdr h3{font-size:11.5px;font-weight:500;color:var(--text);letter-spacing:0.3px}
@@ -223,6 +234,48 @@ body.fs #tabs{border-bottom:1px solid var(--border)}
 .pbody::-webkit-scrollbar-track,.panel ::-webkit-scrollbar-track{background:transparent}
 .pbody::-webkit-scrollbar-thumb,.panel ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .pbody::-webkit-scrollbar-thumb:hover{background:var(--border3)}
+
+/* ── Notes (side bar like History, opened from its own toolbar icon) ── */
+.notes-composer{padding:12px 20px 8px;border-bottom:1px solid var(--border);flex-shrink:0}
+#note-input{width:100%;min-height:78px;max-height:200px;resize:vertical;background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text);font-size:11.5px;font-family:inherit;line-height:1.55;padding:9px 10px;
+  outline:none;transition:border-color .2s,box-shadow .2s;user-select:text}
+#note-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow)}
+#note-input::placeholder{color:var(--text3)}
+.composer-row{display:flex;align-items:center;gap:8px;margin-top:8px;min-height:24px}
+#note-edit-lbl{display:none;font-size:8.5px;color:var(--purple);background:var(--purple-bg);padding:3px 9px;
+  border-radius:var(--radius-pill);letter-spacing:0.4px;text-transform:uppercase;font-weight:600}
+.composer-btns{display:flex;gap:6px;margin-left:auto}
+#note-save,#note-cancel{border:none;border-radius:var(--radius-sm);font-size:10px;font-family:inherit;cursor:pointer;
+  font-weight:500;padding:6px 14px;transition:all .2s var(--ease-out)}
+#note-save{background:var(--blue);color:#fff}
+#note-save:hover{background:var(--blue-hover);transform:translateY(-1px);box-shadow:0 4px 16px var(--blue-glow)}
+#note-save:active{transform:translateY(0)}
+#note-cancel{display:none;background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+#note-cancel:hover{background:var(--surface3);color:var(--text)}
+#note-msg{font-size:9.5px;color:var(--red);min-height:13px;margin-top:5px}
+#notes-list{flex:1;overflow-y:auto;padding:0 0 16px}
+#notes-list::-webkit-scrollbar{width:3px}
+#notes-list::-webkit-scrollbar-track{background:transparent}
+#notes-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.nhdr{padding:13px 16px 5px;font-size:9px;color:var(--text3);font-weight:500;letter-spacing:0.6px;text-transform:uppercase;
+  position:sticky;top:0;background:rgba(12,12,20,0.98);z-index:1}
+#notes-list .he{height:auto;min-height:170px}
+.note{padding:8px 16px 11px;cursor:pointer;transition:background .12s var(--ease-out);border-bottom:1px solid var(--border)}
+.note:hover{background:var(--border)}
+.note:active{background:var(--border2)}
+.note-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:3px}
+.note-time{font-size:8.5px;color:var(--text3);font-variant-numeric:tabular-nums;letter-spacing:0.3px}
+.note-acts{display:flex;gap:4px;opacity:0;transition:opacity .15s var(--ease-out)}
+.note:hover .note-acts{opacity:1}
+.note-acts button{background:none;border:none;color:var(--text3);cursor:pointer;width:20px;height:20px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;transition:all .12s var(--ease-out);padding:0}
+.note-acts .note-edit:hover{color:var(--blue);background:var(--blue-bg)}
+.note-acts .note-del:hover{color:var(--red);background:var(--red-bg)}
+.note-acts svg{width:10px;height:10px;pointer-events:none}
+.note.editing{background:var(--purple-bg);border-left:2px solid var(--purple);padding-left:14px}
+.note-body{font-size:11.5px;color:var(--text);line-height:1.55;white-space:pre-wrap;word-break:break-word;user-select:text}
+.note.editing .note-time{color:var(--purple)}
 
 /* ── Settings ── */
 .sc{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px;transition:border-color .2s var(--ease-out),box-shadow .2s}
@@ -295,9 +348,9 @@ body.fs #tabs{border-bottom:1px solid var(--border)}
 .he .bs{font-size:9.5px;color:var(--text3);margin-top:1px}
 
 /* ── Gate (Password Modal) ── */
-.gate{display:none;position:absolute;inset:0;background:rgba(0,0,0,0.6);z-index:20;align-items:center;justify-content:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.gate{display:none;position:absolute;inset:0;background:rgba(0,0,0,0.6);z-index:20;align-items:center;justify-content:center}
 .gate.open{display:flex;animation:fadeIn .15s var(--ease-out)}
-.gb{background:rgba(12,12,20,0.95);border:1px solid var(--border2);border-radius:16px;padding:28px;width:290px;text-align:center;box-shadow:var(--shadow-lg);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);animation:slideUp .25s var(--ease-out)}
+.gb{background:rgba(12,12,20,0.98);border:1px solid var(--border2);border-radius:16px;padding:28px;width:290px;text-align:center;box-shadow:var(--shadow-lg);animation:slideUp .25s var(--ease-out)}
 .gb h4{font-size:13px;font-weight:500;margin-bottom:2px;color:var(--text)}
 .gb p{font-size:10px;color:var(--text3);margin-bottom:16px;line-height:1.4}
 .gb input{width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-size:11.5px;outline:none;margin-bottom:10px;transition:border-color .2s,box-shadow .2s}
@@ -324,7 +377,7 @@ body.fs #tabs{border-bottom:1px solid var(--border)}
 .gopt-sel .gopt-tt{color:var(--blue)}
 
 /* ── Noise Overlay ── */
-body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;opacity:0.02;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-repeat:repeat;background-size:128px 128px;mix-blend-mode:overlay}
+body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;opacity:0.02;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-repeat:repeat;background-size:128px 128px}
 
 /* ── Content Gradient ── */
 .area::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(74,139,197,0.04) 0%,transparent 60%);pointer-events:none;z-index:-1}
@@ -355,9 +408,15 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
     <div id="load"><svg class="load-ring" viewBox="0 0 16 16" fill="none" stroke="var(--blue)" stroke-width="2"><circle cx="8" cy="8" r="6" stroke="var(--border2)" stroke-width="2"/><path d="M8 2a6 6 0 0 1 6 6" stroke="currentColor"/></svg></div>
     <button class="ib" id="hm-btn" title="Home (Alt+Home)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l6-5 6 5"/><path d="M4 6v6a1 1 0 0 0 1 1h2v-3h2v3h2a1 1 0 0 0 1-1V6"/></svg></button>
   </div>
-  <div id="url-wrap" class="uc"><span class="url-badge url-badge-l" id="badge-left">Default</span><input id="url" placeholder="Search or enter address" spellcheck="false" autofocus><div id="suggest"></div></div>
+  <div class="url-bar-wrap" id="url-bar-wrap-left">
+    <div id="url-wrap" class="uc"><span class="url-badge url-badge-l" id="badge-left">Default</span><input id="url" placeholder="Search or enter address" spellcheck="false" autofocus></div>
+    <div id="suggest"></div>
+  </div>
   <span id="url-split-label">&#124;</span>
-  <div id="url-wrap-right" class="uc"><span class="url-badge url-badge-r" id="badge-right">Workspace</span><input id="url-right" placeholder="Search or enter address" spellcheck="false"><div id="suggest-right"></div></div>
+  <div class="url-bar-wrap" id="url-bar-wrap-right">
+    <div id="url-wrap-right" class="uc"><span class="url-badge url-badge-r" id="badge-right">Workspace</span><input id="url-right" placeholder="Search or enter address" spellcheck="false"></div>
+    <div id="suggest-right"></div>
+  </div>
   <div class="tb-group">
     <button class="ib" id="bm-btn" title="Bookmark this page (Ctrl+D)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1l1.5 5H14l-4 3 1.5 5L8 11l-3.5 3L6 9l-4-3h4.5z"/></svg></button>
     <span id="badge">Ghost Mode</span>
@@ -365,6 +424,7 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
       <span class="np-icon"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 2v9.3A3 3 0 1 0 7 13V5.5l5-1v3.8A3 3 0 1 0 14 9V1z"/></svg></span>
       <span id="np-title"></span>
     </div>
+    <button class="ib" id="notes-btn" title="Take notes (Ctrl+Shift+N)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5l3 3L6 13H3v-3z"/><path d="M9 4l3 3"/></svg><span class="nb-lbl">Take notes</span></button>
     <button class="ib" id="hb" title="History (Ctrl+H)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2 2"/></svg></button>
     <button class="ib" id="dl-btn" title="Downloads (Ctrl+J)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v9M4 6l4 4 4-4"/><path d="M2 12v2h12v-2"/></svg><span id="dl-badge">0</span></button>
     <button class="ib" id="db-btn" title="Time Dashboard"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2v12h12"/><path d="M5 10l2-4 2 2 2-5"/><circle cx="12" cy="6" r="1"/></svg></button>
@@ -390,7 +450,7 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
 
   <!-- History Panel -->
   <div class="panel" id="hp">
-    <div class="phdr"><h3>History</h3><button id="ch" title="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+    <div class="phdr"><h3>History</h3><div style="display:flex;align-items:center;gap:6px"><span id="hp-ws" style="font-size:7.5px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:var(--radius-pill);letter-spacing:0.5px;text-transform:uppercase;display:none;align-items:center"></span><button id="hclear" title="Clear history"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M5 4V2.5A.5.5 0 0 1 5.5 2h5a.5.5 0 0 1 .5.5V4M13 4v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4"/><path d="M6 7v5M10 7v5"/></svg></button><button id="ch" title="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div></div>
     <div id="hl"></div>
     <div class="gate" id="gate">
       <div class="gb">
@@ -472,6 +532,23 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
     </div>
   </div>
 
+  <!-- Notes Panel (same side-bar pattern as History, independent section) -->
+  <div class="panel" id="notes-panel">
+    <div class="phdr"><h3>Notes</h3><div style="display:flex;align-items:center;gap:6px"><span id="notes-count" style="font-size:7.5px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:var(--radius-pill);letter-spacing:0.5px;text-transform:uppercase"></span><button id="notes-close" title="Close (Esc)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div></div>
+    <div class="notes-composer">
+      <textarea id="note-input" placeholder="Write a note… — it is saved with today's date" spellcheck="false"></textarea>
+      <div class="composer-row">
+        <span id="note-edit-lbl">Editing note</span>
+        <div class="composer-btns">
+          <button id="note-cancel" type="button">Cancel</button>
+          <button id="note-save" type="button">Save note</button>
+        </div>
+      </div>
+      <div id="note-msg"></div>
+    </div>
+    <div id="notes-list"></div>
+  </div>
+
 </div>
 <div id="zoom-popup"></div>
 <div id="status"><span id="st"><span class="st-sec"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 3a5 5 0 0 0-8 0M4 8a5 5 0 0 1 8 0"/><path d="M8 5v4M8 11v1"/></svg></span> AEGIS — Private Mode</span><span style="display:flex;align-items:center;gap:8px"><span id="zoom-lbl" title="Reset zoom (Ctrl+0)">100%</span><span id="su"></span></span></div>
@@ -492,6 +569,8 @@ const hp = document.getElementById('hp');
 const hl = document.getElementById('hl');
 const hb = document.getElementById('hb');
 const ch = document.getElementById('ch');
+const hclear = document.getElementById('hclear');
+const hpWs = document.getElementById('hp-ws');
 const sp = document.getElementById('sp');
 const sb = document.getElementById('sb');
 const cs = document.getElementById('cs');
@@ -525,38 +604,59 @@ const tabsRight = document.getElementById('tabs-right');
 const ntl = document.getElementById('ntl');
 const ntr = document.getElementById('ntr');
 
+const tabElMap = new Map();
+const tabElMapSplit = new Map();
+function getTabElMap(wsId) { return wsId ? tabElMapSplit : tabElMap; }
 function renderTabsIn(container, list, wsId) {
-  container.querySelectorAll('.tab').forEach(e => e.remove());
+  const map = getTabElMap(wsId);
   const curActive = wsId && splitActive ? activeByWs[wsId] : active;
+  const ntBtn = container.querySelector('.nt');
+  const activeIds = new Set(list.map(t => t.id));
   list.forEach(t => {
-    const el = document.createElement('div');
+    let el = map.get(t.id);
+    if (el) {
+      const isActive = t.id === curActive;
+      if (el.classList.contains('active') !== isActive) el.classList.toggle('active', isActive);
+      const tl = el.querySelector('.tl');
+      const newLabel = esc((t.title || t.url || 'New Tab').substring(0, 30));
+      if (tl && tl.textContent !== newLabel) tl.textContent = newLabel;
+      if (el.title !== (t.url || t.title || '')) el.title = t.url || t.title || '';
+      if (list.length > 1 && !el.querySelector('.x')) {
+        const x = document.createElement('button'); x.className = 'x';
+        x.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+        x.onclick = (e) => { e.stopPropagation(); if (wsId) g.closeTabWorkspace(wsId, t.id); else g.closeTab(t.id); };
+        el.appendChild(x);
+      } else if (list.length <= 1) { const xb = el.querySelector('.x'); if (xb) xb.remove(); }
+      if (ntBtn && el.nextSibling !== ntBtn) container.insertBefore(el, ntBtn);
+      return;
+    }
+    el = document.createElement('div');
     el.className = 'tab' + (t.id === curActive ? ' active' : '');
     const fav = t.favicon ? '<img class="tf" src="' + esc(t.favicon) + '" loading="lazy" onerror="this.style.display=\'none\'">' : '<span class="tf tf-empty"></span>';
     const label = esc((t.title || t.url || 'New Tab').substring(0, 30));
     el.innerHTML = fav + '<span class="tl">' + label + '</span>';
     el.title = t.url || t.title || '';
     if (list.length > 1) {
-      const x = document.createElement('button');
-      x.className = 'x';
+      const x = document.createElement('button'); x.className = 'x';
       x.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
       x.onclick = (e) => { e.stopPropagation(); if (wsId) g.closeTabWorkspace(wsId, t.id); else g.closeTab(t.id); };
       el.appendChild(x);
     }
     el.onclick = () => { if (wsId) g.activateTabWorkspace(wsId, t.id); else g.activateTab(t.id); };
     el.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); if (list.length > 1) { if (wsId) g.closeTabWorkspace(wsId, t.id); else g.closeTab(t.id); } } };
-    container.appendChild(el);
+    el.oncontextmenu = (e) => { e.preventDefault(); g.tabContextMenu(t.id, wsId); };
+    if (ntBtn) container.insertBefore(el, ntBtn); else container.appendChild(el);
+    map.set(t.id, el);
   });
+  for (const [id, el] of map) { if (!activeIds.has(id)) { el.remove(); map.delete(id); } }
 }
-
 function render() {
   if (splitActive && splitLeftId && splitRightId) {
-    tabsLeft.style.display = 'flex';
-    tabsRight.style.display = 'flex';
+    tabsLeft.style.display = 'flex'; tabsRight.style.display = 'flex';
     renderTabsIn(tabsLeft, tabsByWs[splitLeftId] || [], splitLeftId);
     renderTabsIn(tabsRight, tabsByWs[splitRightId] || [], splitRightId);
   } else {
-    tabsLeft.style.display = 'flex';
-    tabsRight.style.display = 'none';
+    tabsLeft.style.display = 'flex'; tabsRight.style.display = 'none';
     renderTabsIn(tabsLeft, tlist, null);
   }
 }
@@ -570,15 +670,41 @@ function closePanels() {
   const h = hp.classList.contains('open'), s = sp.classList.contains('open'), d = dlp.classList.contains('open');
   hp.classList.remove('open'); sp.classList.remove('open'); dlp.classList.remove('open');
   if (h || s || d) g.panelToggle(false);
+  closeNotes();
+}
+
+function histWsId() { return splitActive ? activeWs : null; }
+
+function updateHistWsLabel() {
+  let name;
+  if (splitActive && activeWs) {
+    name = activeWs === splitLeftId ? (splLeft.textContent || 'Left') : (splRight.textContent || 'Right');
+  } else {
+    name = badgeLeft.textContent || 'Current';
+  }
+  hpWs.textContent = name + ' workspace';
+  hpWs.style.display = 'flex';
+}
+
+function refreshHistForContext() {
+  if (!hp.classList.contains('open')) return;
+  updateHistWsLabel();
+  if (!gate.classList.contains('open')) {
+    hl.innerHTML = '';
+    const histWs = histWsId();
+    g.getHistory(histWs).then(items => renderH(items)).catch(() => {});
+  }
 }
 
 function toggleH() {
+  closeNotes();
   sp.classList.remove('open');
   const o = hp.classList.toggle('open'); g.panelToggle(o);
-  if (o) { hl.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8M12 8v8"/></svg></div><div class="bt">Enter your password</div><div class="bs">to view browsing history</div></div>'; showGate(); }
+  if (o) { updateHistWsLabel(); hl.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8M12 8v8"/></svg></div><div class="bt">Enter your password</div><div class="bs">to view browsing history</div></div>'; showGate(); }
 }
 
 function toggleS() {
+  closeNotes();
   hp.classList.remove('open');
   const o = sp.classList.toggle('open'); g.panelToggle(o);
   if (o) loadSett();
@@ -602,7 +728,8 @@ gok.onclick = async () => {
   const ok = await g.verifyPassword(pw);
   if (ok) {
     hideGate(); hl.innerHTML = '';
-    const histWs = splitActive ? activeWs : null;
+    updateHistWsLabel();
+    const histWs = histWsId();
     const items = histWs ? await g.getHistory(histWs) : await g.getHistory();
     renderH(items);
   } else { gm.textContent = 'Incorrect password.'; }
@@ -628,7 +755,7 @@ function renderH(items) {
   });
 }
 
-function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function esc(s) { const _e = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}; return String(s==null?'':s).replace(/[&<>"']/g, c => _e[c]); }
 
 pi.onchange = () => {
   const f = pi.files[0]; if (!f) return;
@@ -658,8 +785,9 @@ cpb.onclick = async () => {
   else { cpm.textContent = res.error; cpm.className = 'smsg serr'; }
 };
 shb.onclick = () => {
+  closeNotes();
   sp.classList.remove('open'); g.panelToggle(false);
-  setTimeout(() => { hp.classList.add('open'); g.panelToggle(true); hl.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8M12 8v8"/></svg></div><div class="bt">Enter your password</div><div class="bs">to view browsing history</div></div>'; showGate(); }, 200);
+  setTimeout(() => { hp.classList.add('open'); g.panelToggle(true); updateHistWsLabel(); hl.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8M12 8v8"/></svg></div><div class="bt">Enter your password</div><div class="bs">to view browsing history</div></div>'; showGate(); }, 200);
 };
 
 function urlBarForWs(ws) {
@@ -668,6 +796,9 @@ function urlBarForWs(ws) {
   if (ws === splitRightId) return rightBar;
   return leftBar;
 }
+
+let renderDebounce = null;
+function debouncedRender() { if (renderDebounce) return; renderDebounce = setTimeout(() => { renderDebounce = null; render(); }, 30); }
 
 g.onTabUpdated((d) => {
   const src = (splitActive && d.ws && tabsByWs[d.ws]) ? tabsByWs[d.ws] : tlist;
@@ -678,7 +809,7 @@ g.onTabUpdated((d) => {
     if (d.favicon !== undefined) t.favicon = d.favicon;
   }
   const wsActive = d.ws && splitActive ? activeByWs[d.ws] : active;
-  if (d.id === wsActive && d.url) { urlBarForWs(d.ws).setUrl(d.url, d.favicon); checkBookmark(d.url); } render();
+  if (d.id === wsActive && d.url) { urlBarForWs(d.ws).setUrl(d.url, d.favicon); checkBookmark(d.url); } debouncedRender();
 });
 let isLoading = false;
 g.onTabLoading((d) => {
@@ -709,18 +840,31 @@ g.onTabActivated((d) => {
 g.onTabsList((d) => {
   const list = d.tabs || d;
   const ws = d.ws;
+  const incomingActive = (d && d.activeId != null) ? d.activeId : null;
   if (ws && splitActive) {
     tabsByWs[ws] = list;
     activeWs = ws;
-    const curActive = activeByWs[ws];
-    if (!curActive || !list.find(t => t.id === curActive)) {
-      const first = list.length > 0 ? list[0].id : null;
-      if (first) { activeByWs[ws] = first; active = first; }
+    if (incomingActive != null && list.find(t => t.id === incomingActive)) {
+      activeByWs[ws] = incomingActive;
+      active = incomingActive;
+    } else {
+      const curActive = activeByWs[ws];
+      if (!curActive || !list.find(t => t.id === curActive)) {
+        const first = list.length > 0 ? list[0].id : null;
+        if (first) { activeByWs[ws] = first; active = first; }
+      }
     }
   } else {
     tlist = list;
     if (ws) activeWs = ws;
-    if (active && !tlist.find(t => t.id === active)) active = tlist.length > 0 ? tlist[0].id : null;
+    // Main process is source of truth: newly created tab is active
+    if (incomingActive != null && tlist.find(t => t.id === incomingActive)) {
+      active = incomingActive;
+    } else if (active && !tlist.find(t => t.id === active)) {
+      active = tlist.length > 0 ? tlist[0].id : null;
+    } else if (active == null && tlist.length > 0) {
+      active = tlist[0].id;
+    }
   }
   render();
   if (splitActive && ws) {
@@ -742,41 +886,85 @@ g.onShowHistory(() => toggleH());
 function makeURLBar(inputEl, suggestEl, navFn) {
   let suggestIdx = -1;
   let suggestData = [];
+  let debounceTimer = null;
 
-  function closeSuggest() { suggestEl.classList.remove('open'); suggestEl.innerHTML = ''; suggestIdx = -1; suggestData = []; }
+  function closeSuggest() {
+    suggestEl.classList.remove('open');
+    suggestEl.innerHTML = '';
+    suggestIdx = -1;
+    suggestData = [];
+    if (g && g.suggestToggle) g.suggestToggle(false, 0);
+  }
 
-  function navigateTo(val) {
-    closeSuggest(); let input = val.trim(); if (!input) return;
+  function navigateTo(val, isSuggestion) {
+    closeSuggest();
+    let input = (val || '').trim();
+    if (!input) return;
     if (!/^https?:\/\//i.test(input)) {
-      if (/^[\w.-]+\.[a-z]{2,}/i.test(input)) input = 'https://' + input;
+      // Suggestions containing spaces are always search queries (e.g. "www.defense.tn 2026 ..."),
+      // otherwise "https://www.defense.tn 2026" would be an invalid URL.
+      // Also, suggestion clicks should search unless the suggestion is a clean bare domain.
+      const hasSpaces = /\s/.test(input);
+      const looksLikeBareDomain = !hasSpaces && /^[\w.-]+\.[a-z]{2,}(\/[\w\-._~:/?#[\]@!$&'()*+,;=%]*)?$/i.test(input);
+      if (!hasSpaces && (looksLikeBareDomain && !isSuggestion)) input = 'https://' + input;
+      else if (!hasSpaces && looksLikeBareDomain && isSuggestion && /^[\w.-]+\.[a-z]{2,}$/i.test(input)) input = 'https://' + input;
       else input = 'https://www.google.com/search?q=' + encodeURIComponent(input);
     }
-    navFn(input); inputEl.blur();
+    navFn(input);
+    inputEl.blur();
   }
 
   async function fetchSuggestions(q) {
-    if (!q.trim()) { closeSuggest(); return; }
+    if (!q || !q.trim()) { closeSuggest(); return; }
+    // Strip protocol for the suggest API: "https://www.google.com/" -> "www.google.com/",
+    // Google's suggest endpoint handles bare terms better than full URLs.
+    let apiQ = q.trim().replace(/^https?:\/\//i, '');
+    if (!apiQ) { closeSuggest(); return; }
     try {
-      const queries = await g.fetchSuggestions(q);
-      suggestEl.innerHTML = '';
+      const queries = await g.fetchSuggestions(apiQ);
+      // Ignore stale responses: user kept typing while we were fetching
+      const currentVal = inputEl.value.trim().replace(/^https?:\/\//i, '');
+      if (currentVal !== apiQ) { return; }
       if (!queries || !queries.length) { closeSuggest(); return; }
-      suggestData = queries;
-      suggestEl.innerHTML = queries.map((s, i) => '<div class="si" data-idx="' + i + '"><span class="siq">' + esc(s) + '</span><span class="sit">search</span></div>').join('');
-      suggestEl.classList.add('open'); suggestIdx = -1;
+      suggestData = queries.slice(0, 6);
+      const searchSvg = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="3.5"/><path d="M10 10l3.5 3.5"/></svg>';
+      suggestEl.innerHTML = suggestData.map((s, i) =>
+        '<div class="si" data-idx="' + i + '">' +
+          '<span class="si-icon">' + searchSvg + '</span>' +
+          '<span class="siq">' + esc(s) + '</span>' +
+          '<span class="sit">Search</span>' +
+        '</div>'
+      ).join('');
+      suggestEl.classList.add('open');
+      suggestIdx = -1;
+      // Use real DOM height so the native WebContentsView gap aligns exactly
+      // with the dropdown (no black gap, no overlap).
+      requestAnimationFrame(() => {
+        const realHeight = suggestEl.offsetHeight || (suggestData.length * 33 + 12);
+        if (g && g.suggestToggle) g.suggestToggle(true, realHeight + 8);
+      });
     } catch(e) { closeSuggest(); }
   }
 
   inputEl.addEventListener('input', () => {
-    if (inputEl.value.trim()) fetchSuggestions(inputEl.value);
-    else closeSuggest();
+    clearTimeout(debounceTimer);
+    const val = inputEl.value.trim();
+    if (val) {
+      debounceTimer = setTimeout(() => fetchSuggestions(val), 80);
+    } else {
+      closeSuggest();
+    }
   });
 
   inputEl.addEventListener('keydown', (e) => {
     const items = suggestEl.querySelectorAll('.si');
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (suggestIdx >= 0 && suggestData[suggestIdx]) { navigateTo(suggestData[suggestIdx]); }
-      else { navigateTo(inputEl.value); }
+      if (suggestIdx >= 0 && suggestData[suggestIdx]) {
+        navigateTo(suggestData[suggestIdx], true);
+      } else {
+        navigateTo(inputEl.value, false);
+      }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!items.length) return;
@@ -786,7 +974,11 @@ function makeURLBar(inputEl, suggestEl, navFn) {
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (!items.length) return;
-      if (suggestIdx <= 0) { suggestIdx = -1; items.forEach(el => el.classList.remove('sel')); return; }
+      if (suggestIdx <= 0) {
+        suggestIdx = -1;
+        items.forEach(el => el.classList.remove('sel'));
+        return;
+      }
       suggestIdx = Math.max(suggestIdx - 1, 0);
       items.forEach((el, i) => el.classList.toggle('sel', i === suggestIdx));
       if (suggestData[suggestIdx]) inputEl.value = suggestData[suggestIdx];
@@ -796,13 +988,14 @@ function makeURLBar(inputEl, suggestEl, navFn) {
   });
 
   suggestEl.addEventListener('mousedown', (e) => {
+    e.preventDefault();
     const si = e.target.closest('.si');
     if (!si) return;
-    const idx = parseInt(si.dataset.idx);
-    if (suggestData[idx]) navigateTo(suggestData[idx]);
+    const idx = parseInt(si.dataset.idx, 10);
+    if (suggestData[idx]) navigateTo(suggestData[idx], true);
   });
 
-  inputEl.addEventListener('blur', () => setTimeout(closeSuggest, 200));
+  inputEl.addEventListener('blur', () => setTimeout(closeSuggest, 150));
 
   return {
     setUrl: (v, favicon) => {
@@ -839,8 +1032,14 @@ const rightBar = makeURLBar(urlR, document.getElementById('suggest-right'), (v) 
 });
 
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('#url-wrap')) document.getElementById('suggest').classList.remove('open');
-  if (!e.target.closest('#url-wrap-right')) document.getElementById('suggest-right').classList.remove('open');
+  if (!e.target.closest('#url-bar-wrap-left')) {
+    const s = document.getElementById('suggest');
+    if (s.classList.contains('open')) { s.classList.remove('open'); if (g.suggestToggle) g.suggestToggle(false, 0); }
+  }
+  if (!e.target.closest('#url-bar-wrap-right')) {
+    const s = document.getElementById('suggest-right');
+    if (s.classList.contains('open')) { s.classList.remove('open'); if (g.suggestToggle) g.suggestToggle(false, 0); }
+  }
 });
 back.onclick = () => { if (splitActive && splitLeftId) g.goBackWorkspace(splitLeftId); else g.goBack(); };
 fwd.onclick = () => { if (splitActive && splitLeftId) g.goForwardWorkspace(splitLeftId); else g.goForward(); };
@@ -852,6 +1051,11 @@ ntl.onclick = () => { if (splitActive && splitLeftId) g.newTabWorkspace(splitLef
 ntr.onclick = () => { if (splitActive && splitRightId) g.newTabWorkspace(splitRightId); };
 hb.onclick = toggleH;
 ch.onclick = () => { hp.classList.remove('open'); g.panelToggle(false); };
+hclear.onclick = async () => {
+  const histWs = histWsId();
+  const res = await g.clearHistory(histWs);
+  if (res && res.ok) { hl.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 3"/></svg></div><div class="bt">No history yet</div><div class="bs">Start browsing to see your history here</div></div>'; }
+};
 sb.onclick = toggleS;
 cs.onclick = () => { sp.classList.remove('open'); g.panelToggle(false); };
 document.getElementById('fs-btn').onclick = () => g.toggleFullscreen();
@@ -1012,6 +1216,7 @@ dlClear.onclick = () => {
 };
 
 function toggleDl() {
+  closeNotes();
   hp.classList.remove('open'); sp.classList.remove('open');
   const o = dlp.classList.toggle('open'); g.panelToggle(o);
   if (o) {
@@ -1255,8 +1460,8 @@ const badgeLeft = document.getElementById('badge-left');
 const badgeRight = document.getElementById('badge-right');
 let splitActive = false;
 
-splLeft.onclick = () => { if (splitActive) { g.focusSplitPane('left'); refreshDl(); } };
-splRight.onclick = () => { if (splitActive) { g.focusSplitPane('right'); refreshDl(); } };
+splLeft.onclick = () => { if (splitActive) { g.focusSplitPane('left'); } };
+splRight.onclick = () => { if (splitActive) { g.focusSplitPane('right'); } };
 splExit.onclick = () => { g.exitSplit(); };
 
 async function refreshDl() {
@@ -1299,16 +1504,27 @@ g.onSplitChanged(async (d) => {
     splitLeftId = d.left;
     splitRightId = d.right;
     activeWs = d.focused === 'right' ? splitRightId : splitLeftId;
-    urlWrapR.classList.add('open');
+    document.getElementById('url-bar-wrap-right').classList.add('open');
     urlSplitLabel.classList.add('open');
     splitHandle.classList.add('open');
     badgeLeft.textContent = d.leftName || 'Left';
     badgeRight.textContent = d.rightName || 'Right';
     activeByWs = {};
-    const [lt, rt] = await Promise.all([g.getTabsForWorkspace(splitLeftId), g.getTabsForWorkspace(splitRightId)]);
-    if (lt.length > 0) { tabsByWs[splitLeftId] = lt; activeByWs[splitLeftId] = lt[0].id; leftBar.setUrl(lt[0].url); }
-    if (rt.length > 0) { tabsByWs[splitRightId] = rt; activeByWs[splitRightId] = rt[0].id; rightBar.setUrl(rt[0].url); }
+    const [ltRaw, rtRaw] = await Promise.all([g.getTabsForWorkspace(splitLeftId), g.getTabsForWorkspace(splitRightId)]);
+    const lt = ltRaw && ltRaw.tabs ? ltRaw.tabs : ltRaw;
+    const rt = rtRaw && rtRaw.tabs ? rtRaw.tabs : rtRaw;
+    const ltActive = ltRaw && ltRaw.activeId != null ? ltRaw.activeId : null;
+    const rtActive = rtRaw && rtRaw.activeId != null ? rtRaw.activeId : null;
+    if (lt.length > 0) { tabsByWs[splitLeftId] = lt; const aid = lt.find(t => t.id === ltActive) ? ltActive : lt[0].id; activeByWs[splitLeftId] = aid; const at = lt.find(t => t.id === aid) || lt[0]; leftBar.setUrl(at.url); }
+    if (rt.length > 0) { tabsByWs[splitRightId] = rt; const aid = rt.find(t => t.id === rtActive) ? rtActive : rt[0].id; activeByWs[splitRightId] = aid; const at = rt.find(t => t.id === aid) || rt[0]; rightBar.setUrl(at.url); }
     render();
+    if (dlp.classList.contains('open')) {
+      const wsEl = document.getElementById('dlp-ws');
+      const name = activeWs === splitLeftId ? (splLeft.textContent || 'Left') : (splRight.textContent || 'Right');
+      wsEl.textContent = name + ' workspace';
+      refreshDl();
+    }
+    refreshHistForContext();
   } else {
     splitBar.classList.remove('open');
     splLeft.classList.remove('focused');
@@ -1320,12 +1536,14 @@ g.onSplitChanged(async (d) => {
     activeWs = null;
     tabsByWs = {};
     activeByWs = {};
-    urlWrapR.classList.remove('open');
+    document.getElementById('url-bar-wrap-right').classList.remove('open');
     urlSplitLabel.classList.remove('open');
     splitHandle.classList.remove('open');
     document.getElementById('suggest-right').classList.remove('open');
+    if (g.suggestToggle) g.suggestToggle(false, 0);
     refreshDl();
     render();
+    refreshHistForContext();
   }
 });
 
@@ -1347,7 +1565,11 @@ document.addEventListener('mousemove', (e) => {
   const area = document.querySelector('.area');
   const rect = area.getBoundingClientRect();
   const x = e.clientX - rect.left;
-  const ratio = Math.max(0.15, Math.min(0.85, x / rect.width));
+  // The right side may be reserved for a side bar (notes/history/downloads/settings) — split only the page area
+  const sideBarOpen = hp.classList.contains('open') || sp.classList.contains('open') || dlp.classList.contains('open')
+    || document.getElementById('notes-panel').classList.contains('open');
+  const pageW = Math.max(200, rect.width - (sideBarOpen ? 400 : 0));
+  const ratio = Math.max(0.15, Math.min(0.85, x / pageW));
   g.setSplitRatio(ratio);
 });
 
@@ -1361,6 +1583,7 @@ document.addEventListener('mouseup', () => {
 
 g.onWorkspaceSwitched((d) => {
   badgeLeft.textContent = d.name;
+  refreshHistForContext();
 });
 
 g.onReturnToLogin(async () => {
@@ -1414,16 +1637,164 @@ npEl.onclick = () => {
   });
 };
 
-g.getTabs().then(async list => {
-  tlist = list;
+g.getTabs().then(async raw => {
+  const list = raw && raw.tabs ? raw.tabs : raw;
+  const incomingActive = raw && raw.activeId != null ? raw.activeId : null;
+  tlist = list || [];
   if (!splitActive) {
-    if (tlist.length > 0) { active = tlist[0].id; leftBar.setUrl(tlist[0].url); checkBookmark(tlist[0].url); }
+    if (tlist.length > 0) {
+      active = (incomingActive != null && tlist.find(t => t.id === incomingActive)) ? incomingActive : tlist[0].id;
+      const at = tlist.find(t => t.id === active) || tlist[0];
+      leftBar.setUrl(at.url); checkBookmark(at.url);
+    }
     render();
   }
   try {
     const w = await g.getActiveWorkspace();
     if (w) badgeLeft.textContent = w.name;
   } catch(e) {}
+});
+
+// ── Notes (dedicated icon → side bar, same pattern as History) ──
+const notesBtn = document.getElementById('notes-btn');
+const notesPanel = document.getElementById('notes-panel');
+const notesList = document.getElementById('notes-list');
+const notesCount = document.getElementById('notes-count');
+const notesClose = document.getElementById('notes-close');
+const noteInput = document.getElementById('note-input');
+const noteSave = document.getElementById('note-save');
+const noteCancel = document.getElementById('note-cancel');
+const noteMsg = document.getElementById('note-msg');
+const noteEditLbl = document.getElementById('note-edit-lbl');
+let notesOpen = false;
+let editingNoteId = null;
+
+function resetComposer() {
+  editingNoteId = null;
+  noteInput.value = '';
+  noteEditLbl.style.display = 'none';
+  noteCancel.style.display = 'none';
+  noteSave.textContent = 'Save note';
+  noteMsg.textContent = '';
+}
+
+function openNotes() {
+  // Only one side bar at a time (same rule as History / Downloads / Settings)
+  hp.classList.remove('open'); sp.classList.remove('open'); dlp.classList.remove('open');
+  notesOpen = true;
+  notesBtn.classList.add('active');
+  notesPanel.classList.add('open');
+  g.panelToggle(true);
+  loadNotes();
+  setTimeout(() => { try { noteInput.focus(); } catch(e) {} }, 80);
+}
+
+function closeNotes() {
+  if (!notesOpen) return;
+  notesOpen = false;
+  notesBtn.classList.remove('active');
+  notesPanel.classList.remove('open');
+  resetComposer();
+  g.panelToggle(false);
+}
+
+function toggleNotes() { if (notesOpen) closeNotes(); else openNotes(); }
+
+notesBtn.onclick = toggleNotes;
+notesClose.onclick = closeNotes;
+if (g.onToggleNotes) g.onToggleNotes(() => toggleNotes());
+
+async function loadNotes() {
+  if (!notesOpen) return;
+  let notes = [];
+  try { notes = await g.getNotes(); } catch(e) {}
+  renderNotes(notes);
+}
+
+function noteDayKey(ts) { const d = new Date(ts); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+function noteDayLabel(ts) {
+  const k = noteDayKey(ts);
+  if (k === noteDayKey(Date.now())) return 'Today';
+  if (k === noteDayKey(Date.now() - 86400000)) return 'Yesterday';
+  return new Date(ts).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// Newest first, grouped per calendar day (Today / Yesterday / date)
+function renderNotes(notes) {
+  const list = (notes || []).slice().sort((a, b) => ((b.created || 0) - (a.created || 0)) || ((b.id || 0) - (a.id || 0)));
+  notesCount.textContent = list.length ? list.length + (list.length === 1 ? ' note' : ' notes') : '';
+  if (!list.length) {
+    notesList.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/><path d="M8.5 13h7M8.5 16.5h4.5"/></svg></div><div class="bt">No notes yet</div><div class="bs">Notes are ordered by date — newest on top</div></div>';
+    return;
+  }
+  const groups = [];
+  const idx = {};
+  list.forEach(n => {
+    const k = noteDayKey(n.created);
+    if (!(k in idx)) { idx[k] = groups.length; groups.push({ label: noteDayLabel(n.created), items: [] }); }
+    groups[idx[k]].items.push(n);
+  });
+  notesList.innerHTML = groups.map(gr =>
+    '<div class="nhdr">' + esc(gr.label) + '</div>' + gr.items.map(n => {
+      const time = new Date(n.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const editing = n.id === editingNoteId ? ' editing' : '';
+      return '<div class="note' + editing + '" data-id="' + n.id + '" title="Click to edit this note">' +
+        '<div class="note-head"><span class="note-time">' + time + '</span><span class="note-acts">' +
+        '<button class="note-edit" title="Edit"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z"/><path d="M9.5 4l2.5 2.5"/></svg></button>' +
+        '<button class="note-del" title="Delete"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>' +
+        '</span></div><div class="note-body">' + esc(n.content) + '</div></div>';
+    }).join('')
+  ).join('');
+}
+
+notesList.addEventListener('click', (e) => {
+  const noteEl = e.target.closest('.note');
+  if (!noteEl) return;
+  const id = Number(noteEl.dataset.id);
+  if (e.target.closest('.note-del')) {
+    noteMsg.textContent = '';
+    if (!confirm('Delete this note? This cannot be undone.')) return;
+    g.deleteNote(id).then((res) => {
+      if (!res || res.ok === false) { noteMsg.textContent = (res && res.error) || 'Could not delete the note.'; return; }
+      if (editingNoteId === id) resetComposer();
+      noteMsg.textContent = '';
+      loadNotes();
+    }).catch(() => { noteMsg.textContent = 'Could not delete the note.'; });
+    return;
+  }
+  const body = noteEl.querySelector('.note-body');
+  editingNoteId = id;
+  noteInput.value = body ? body.textContent : '';
+  noteEditLbl.style.display = 'inline-block';
+  noteCancel.style.display = 'inline-block';
+  noteSave.textContent = 'Update note';
+  noteMsg.textContent = '';
+  Array.from(notesList.querySelectorAll('.note')).forEach(el => el.classList.toggle('editing', el === noteEl));
+  try { noteInput.focus(); noteInput.setSelectionRange(noteInput.value.length, noteInput.value.length); } catch(err) {}
+});
+
+noteSave.onclick = async () => {
+  const text = noteInput.value.trim();
+  if (!text) { noteMsg.textContent = 'Write something before saving.'; return; }
+  noteMsg.textContent = '';
+  let res;
+  try {
+    res = editingNoteId ? await g.updateNote(editingNoteId, text) : await g.addNote(text);
+  } catch(err) { noteMsg.textContent = 'Could not save the note.'; return; }
+  if (!res || res.ok === false) { noteMsg.textContent = (res && res.error) || 'Could not save the note.'; return; }
+  resetComposer();
+  loadNotes();
+  try { noteInput.focus(); } catch(err) {}
+};
+noteCancel.onclick = () => { resetComposer(); Array.from(notesList.querySelectorAll('.note')).forEach(el => el.classList.remove('editing')); try { noteInput.focus(); } catch(e) {} };
+noteInput.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); noteSave.click(); }
+  if (e.key === 'Escape') { e.stopPropagation(); resetComposer(); Array.from(notesList.querySelectorAll('.note')).forEach(el => el.classList.remove('editing')); }
+});
+
+// Ctrl+Shift+N toggles the notes side bar
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); toggleNotes(); }
 });
 
 ['mousemove','mousedown','keydown','click','scroll','touchstart','wheel'].forEach(evt => {

@@ -396,8 +396,8 @@ async function deleteAllData() {
   const status = await window.ghost.getAnalyticsStatus();
   if (status) document.getElementById('analyticsToggle').checked = status.enabled;
   refreshAll();
-  // Auto-refresh every 30s
-  setInterval(refreshAll, 30000);
+  const refreshTimer = setInterval(refreshAll, 30000);
+  window.addEventListener('beforeunload', () => clearInterval(refreshTimer));
 })();
 </script>
 </body>

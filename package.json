@@ -6,14 +6,53 @@
   "build": {
     "appId": "com.aegis.browser",
     "productName": "AEGIS",
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "npmRebuild": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "login.html",
+      "workspace.html",
+      "controls.html",
+      "dashboard.html",
+      "settings.html",
+      "parameters.html",
+      "confirm-quit.html",
+      "logo.png",
+      "logo.ico",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "publish": null,
     "win": {
-      "target": ["portable", "nsis"],
-      "icon": "logo.ico",
-      "signDlls": false,
-      "signAndEditExecutable": false
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "logo.ico"
     },
     "portable": {
-      "artifactName": "AEGIS-${version}.exe",
+      "artifactName": "AEGIS-Portable-${version}.exe",
       "requestExecutionLevel": "user"
     },
     "nsis": {
@@ -23,19 +62,13 @@
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AEGIS Browser",
-      "installerIcon": "logo.ico",
-      "uninstallerIcon": "logo.ico",
-      "installerHeaderIcon": "logo.ico",
+      "shortcutName": "AEGIS",
+      "installerIcon": "installer.ico",
+      "uninstallerIcon": "installer.ico",
+      "installerHeaderIcon": "installer.ico",
       "uninstallDisplayName": "AEGIS Browser",
+      "deleteAppDataOnUninstall": false,
       "license": false
-    },
-    "extraResources": [
-      { "from": "Start Portable.bat", "to": "../Start Portable.bat" },
-      { "from": "Start Portable.ps1", "to": "../Start Portable.ps1" }
-    ],
-    "directories": {
-      "output": "dist"
     }
   },
   "scripts": {
@@ -43,12 +76,13 @@
     "pack": "electron-packager . AEGIS --platform=win32 --arch=x64 --icon=logo.ico --out=dist --overwrite",
     "portable": "node create-logo.js && electron-builder --win portable",
     "installer": "node create-logo.js && electron-builder --win nsis",
-    "release": "node create-logo.js && electron-builder --win portable && electron-builder --win nsis",
+    "release": "node create-logo.js && electron-builder --win nsis portable",
     "create-logo": "node create-logo.js",
     "prebuild": "node create-logo.js",
     "clean": "Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "electron": "^35.0.0",
     "electron-builder": "^25.0.0",
     "electron-packager": "^17.1.2",

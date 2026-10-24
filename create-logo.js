@@ -5,12 +5,10 @@ const path = require('path');
 
 const OUT = path.join(__dirname);
 
-async function main() {
-  const sizes = [16, 32, 48, 64, 128, 256];
-  const shields = [];
+const SIZES = [16, 32, 48, 64, 128, 256];
 
-  // Shield SVG
-  const svg = `<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+// Shield SVG (application icon)
+const APP_SVG = `<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="s" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#1a1a2e"/>
@@ -34,17 +32,44 @@ async function main() {
   <circle cx="160" cy="96" r="3" fill="rgba(99,179,237,0.3)"/>
 </svg>`;
 
-  const png256 = await sharp(Buffer.from(svg)).resize(256, 256).png().toBuffer();
+// Installer SVG (shield + install/download arrow, distinct accent color)
+const INSTALLER_SVG = `<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#132b3f"/>
+      <stop offset="100%" style="stop-color:#0b1a26"/>
+    </linearGradient>
+    <linearGradient id="a" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3ddc97"/>
+      <stop offset="100%" style="stop-color:#2bb3a3"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded base -->
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="url(#bg)" stroke="url(#a)" stroke-width="6"/>
+  <!-- Shield -->
+  <path d="M128 44 L198 70 L198 124 C198 168 167 199 128 214 C89 199 58 168 58 124 L58 70 Z" fill="none" stroke="url(#a)" stroke-width="9" stroke-linejoin="round"/>
+  <!-- Download arrow shaft -->
+  <path d="M128 84 L128 144" stroke="url(#a)" stroke-width="14" stroke-linecap="round"/>
+  <!-- Arrow head -->
+  <path d="M102 124 L128 150 L154 124" fill="none" stroke="url(#a)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Tray -->
+  <path d="M100 178 L156 178" stroke="url(#a)" stroke-width="14" stroke-linecap="round"/>
+</svg>`;
+
+async function makeIco(svg, outName) {
+  const pngs = [];
+  for (const s of SIZES) pngs.push(await sharp(Buffer.from(svg)).resize(s, s).png().toBuffer());
+  const ico = await pngToIco(pngs);
+  await fs.promises.writeFile(path.join(OUT, outName), ico);
+}
+
+async function main() {
+  const png256 = await sharp(Buffer.from(APP_SVG)).resize(256, 256).png().toBuffer();
   await fs.promises.writeFile(path.join(OUT, 'logo.png'), png256);
 
-  for (const s of sizes) {
-    const buf = await sharp(Buffer.from(svg)).resize(s, s).png().toBuffer();
-    shields.push(buf);
-  }
-
-  const ico = await pngToIco(shields);
-  await fs.promises.writeFile(path.join(OUT, 'logo.ico'), ico);
-  console.log('Created logo.png and logo.ico');
+  await makeIco(APP_SVG, 'logo.ico');
+  await makeIco(INSTALLER_SVG, 'installer.ico');
+  console.log('Created logo.png, logo.ico and installer.ico');
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

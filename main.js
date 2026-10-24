@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
+const { execFile } = require('child_process');
 
 // ── Portable Mode ──
 // All user data (DB, sessions, cookies) stored next to the app when portable.dat
@@ -41,11 +42,26 @@ const TOP = 78;
 const BOTTOM = 22;
 const DB_PATH = path.join(app.getPath('userData'), 'ghostview.db');
 
+// ── Network speed prefs (must be applied before app ready) ──
+const NET_PREFS_PATH = path.join(app.getPath('userData'), 'net-prefs.json');
+let netPrefs = { secureDns: false };
+try { netPrefs = Object.assign(netPrefs, JSON.parse(fs.readFileSync(NET_PREFS_PATH, 'utf8'))); } catch (e) {}
+
 app.commandLine.appendSwitch('disable-features', 'MediaRouter,ChromeWhatsNewUI');
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-sync');
 app.commandLine.appendSwitch('disable-features', 'msWebOOUI');
+// Download large files over multiple parallel connections
+app.commandLine.appendSwitch('enable-parallel-downloading');
+// Secure DNS (DNS-over-HTTPS) — opt-in via Settings → Network Speed
+if (netPrefs.secureDns) app.commandLine.appendSwitch('enable-features', 'DnsOverHttps:DnsOverHttpsMode/secure');
 app.setAsDefaultProtocolClient('ghostview');
+// Register AEGIS for http/https links so Windows can open links with it.
+// Packaged app only — in dev this would point links at electron.exe and hijack them.
+if (app.isPackaged) {
+  try { app.setAsDefaultProtocolClient('http'); } catch (e) {}
+  try { app.setAsDefaultProtocolClient('https'); } catch (e) {}
+}
 
 let mainWindow;
 let workspaceTabs = {};
@@ -55,7 +71,8 @@ let currentUser = null;
 let currentWorkspace = null;
 let autoSaveInterval = null;
 let idleTimeout = null;
-const IDLE_TIMEOUT_MS = 300000;
+const DEFAULT_AUTO_CLOSE = 1;
+const DEFAULT_AUTO_CLOSE_SECONDS = 300;
 let panelOpen = false;
 const PANEL_WIDTH = 400;
 let zoomLevel = 0;
@@ -65,6 +82,7 @@ let splitLeft = null;
 let splitRight = null;
 let splitRatio = 0.5;
 let db;
+let suggestHeight = 0;
 let playingTabs = new Map();
 let powerSaveId = null;
 
@@ -114,31 +132,50 @@ function getActiveTab(wsId) {
   return tabs.find(t => t.id === id) || (tabs.length > 0 ? tabs[0] : null);
 }
 
-function syncViews() {
-  Object.values(workspaceTabs).forEach(tabs => {
-    tabs.forEach(t => { try { mainWindow.contentView.removeChildView(t.view); } catch(e) {} });
-  });
+let shownViews = new Set();
+let syncViewsPending = false;
+let lastSyncBounds = '';
+function removeShownViews() {
+  shownViews.forEach(v => { try { mainWindow.contentView.removeChildView(v); } catch(e) {} });
+  shownViews.clear();
+}
+function syncViewsImmediate() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const isFS = mainWindow.isFullScreen();
   const b = mainWindow.getBounds();
   const pw = panelOpen ? PANEL_WIDTH : 0;
-  const top = TOP;
-  const h = b.height - top - (isFS ? 0 : BOTTOM);
+  const top = TOP + suggestHeight;
+  const h = Math.max(50, b.height - top - (isFS ? 0 : BOTTOM));
   if (splitMode && splitLeft && splitRight) {
     const gap = 4;
     const handleW = 6;
     const totalW = b.width - pw;
     const leftW = Math.floor(totalW * splitRatio);
     const rightW = totalW - leftW - handleW - gap;
+    const boundsKey = `s|${leftW}|${rightW}|${top}|${h}|${pw}`;
+    if (boundsKey === lastSyncBounds) return;
+    lastSyncBounds = boundsKey;
+    removeShownViews();
     const lt = getActiveTab(splitLeft);
-    if (lt) { lt.view.setBounds({ x:0, y:top, width:leftW, height:h }); mainWindow.contentView.addChildView(lt.view); }
+    if (lt) { lt.view.setBounds({ x:0, y:top, width:leftW, height:h }); mainWindow.contentView.addChildView(lt.view); shownViews.add(lt.view); }
     const rt = getActiveTab(splitRight);
-    if (rt) { rt.view.setBounds({ x:leftW + gap + handleW, y:top, width:rightW, height:h }); mainWindow.contentView.addChildView(rt.view); }
+    if (rt) { rt.view.setBounds({ x:leftW + gap + handleW, y:top, width:rightW, height:h }); mainWindow.contentView.addChildView(rt.view); shownViews.add(rt.view); }
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('split-bounds', { left: leftW, right: rightW, handleX: leftW + gap, total: totalW });
   } else if (currentWorkspace) {
     const t = getActiveTab(currentWorkspace);
-    if (t) { t.view.setBounds({ x:0, y:top, width:b.width-pw, height:h }); mainWindow.contentView.addChildView(t.view); }
+    if (t) {
+      const boundsKey = `n|0|${top}|${b.width-pw}|${h}|${pw}`;
+      if (boundsKey === lastSyncBounds) return;
+      lastSyncBounds = boundsKey;
+      removeShownViews();
+      t.view.setBounds({ x:0, y:top, width:b.width-pw, height:h }); mainWindow.contentView.addChildView(t.view); shownViews.add(t.view);
+    }
   }
+}
+function syncViews() {
+  if (syncViewsPending) return;
+  syncViewsPending = true;
+  process.nextTick(() => { syncViewsPending = false; lastSyncBounds = ''; syncViewsImmediate(); });
 }
 
 // ── Database ──
@@ -157,6 +194,7 @@ function initDB() {
     );
     CREATE TABLE IF NOT EXISTS workspaces (
       id TEXT NOT NULL, user_pseudo TEXT NOT NULL, name TEXT NOT NULL, created INTEGER NOT NULL,
+      color TEXT DEFAULT '#4a8bc5',
       PRIMARY KEY (id, user_pseudo)
     );
     CREATE TABLE IF NOT EXISTS tabs (
@@ -196,9 +234,37 @@ function initDB() {
       learning_time INTEGER DEFAULT 0,
       PRIMARY KEY (date, user_pseudo)
     );
+    CREATE TABLE IF NOT EXISTS notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_pseudo TEXT NOT NULL,
+      content TEXT NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL
+    );
   `);
   try { db.exec('ALTER TABLE downloads ADD COLUMN workspace_id TEXT NOT NULL DEFAULT \'\''); } catch(e) {}
   try { db.exec('UPDATE downloads SET workspace_id = \'default\' WHERE workspace_id = \'\''); } catch(e) {}
+  try { db.exec('ALTER TABLE workspaces ADD COLUMN color TEXT DEFAULT \'#4a8bc5\''); } catch(e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN auto_close INTEGER NOT NULL DEFAULT 1"); } catch(e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN auto_close_seconds INTEGER NOT NULL DEFAULT 300"); } catch(e) {}
+  // ── Persistent session: tab order + active tab per workspace ──
+  try { db.exec('ALTER TABLE tabs ADD COLUMN position INTEGER NOT NULL DEFAULT 0'); } catch(e) {}
+  try { db.exec('ALTER TABLE workspaces ADD COLUMN active_url TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE workspaces ADD COLUMN active_index INTEGER NOT NULL DEFAULT 0'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tabs_user_ws ON tabs(user_pseudo, workspace_id)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_history_user_ws_ts ON history(user_pseudo, workspace_id, timestamp)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bookmarks_user_ws ON bookmarks(user_pseudo, workspace_id)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_visits_user_start ON page_visits(user_pseudo, start_time)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_visits_user_domain ON page_visits(user_pseudo, domain)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_visits_user_ws ON page_visits(user_pseudo, workspace_id)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_visits_category ON page_visits(user_pseudo, category, start_time)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks(user_pseudo, workspace_id, url)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON browser_sessions(user_pseudo, start_time)'); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_notes_user_created ON notes(user_pseudo, created)'); } catch(e) {}
+  // Assign distinct colors to existing workspaces that have the default
+  const wsColors = ['#4a8bc5','#7a5db5','#48bb78','#e5834a','#e56a6a','#4ac5b5','#c5a84a','#9b5de5'];
+  try {
+    const uncolored = db.prepare("SELECT id, user_pseudo, ROW_NUMBER() OVER (PARTITION BY user_pseudo ORDER BY created) AS rn FROM workspaces WHERE color='#4a8bc5'").all();
+    const upd = db.prepare('UPDATE workspaces SET color=? WHERE id=? AND user_pseudo=?');
+    uncolored.forEach(r => upd.run(wsColors[(r.rn - 1) % wsColors.length], r.id, r.user_pseudo));
+  } catch(e) {}
   if (hasJson) {
     try {
       const json = JSON.parse(fs.readFileSync(jsonFile, 'utf-8'));
@@ -225,6 +291,30 @@ function initDB() {
       fs.renameSync(jsonFile, jsonFile + '.bak');
     } catch(e) { console.error('Migration error:', e); }
   }
+}
+
+const bookmarkCache = new Map();
+function bookmarkKey(p, ws, url) { return p + '|' + ws + '|' + url; }
+function invalidateBookmarkCache() { bookmarkCache.clear(); }
+
+const stmt = {};
+function prepareStatements() {
+  stmt.historyInsert = db.prepare('INSERT INTO history (user_pseudo,workspace_id,url,title,timestamp) VALUES (?,?,?,?,?)');
+  stmt.visitInsert = db.prepare('INSERT INTO page_visits (user_pseudo,workspace_id,url,domain,category,title,start_time) VALUES (?,?,?,?,?,?,?)');
+  stmt.visitUpdate = db.prepare('UPDATE page_visits SET end_time=?,duration=? WHERE id=?');
+  stmt.tabDelete = db.prepare('DELETE FROM tabs WHERE user_pseudo=? AND workspace_id=?');
+  try {
+    stmt.tabInsert = db.prepare('INSERT INTO tabs (user_pseudo,workspace_id,url,title,position) VALUES (?,?,?,?,?)');
+  } catch(e) {
+    stmt.tabInsert = db.prepare('INSERT INTO tabs (user_pseudo,workspace_id,url,title) VALUES (?,?,?,?)');
+  }
+  stmt.bookmarkCheck = db.prepare('SELECT id FROM bookmarks WHERE user_pseudo=? AND workspace_id=? AND url=?');
+  stmt.bookmarkInsert = db.prepare('INSERT INTO bookmarks (user_pseudo,workspace_id,url,title,timestamp) VALUES (?,?,?,?,?)');
+  stmt.bookmarkDelete = db.prepare('DELETE FROM bookmarks WHERE user_pseudo=? AND workspace_id=? AND url=?');
+  stmt.noteList = db.prepare('SELECT id,content,created,updated FROM notes WHERE user_pseudo=? ORDER BY created DESC, id DESC');
+  stmt.noteInsert = db.prepare('INSERT INTO notes (user_pseudo,content,created,updated) VALUES (?,?,?,?)');
+  stmt.noteUpdate = db.prepare('UPDATE notes SET content=?,updated=? WHERE id=? AND user_pseudo=?');
+  stmt.noteDelete = db.prepare('DELETE FROM notes WHERE id=? AND user_pseudo=?');
 }
 
 // ── Analytics URL Classifier ──
@@ -259,9 +349,7 @@ function recordVisitStart(tabId, url, title, wsId) {
   const domain = getDomain(url);
   const category = classifyDomain(domain);
   const now = Date.now();
-  const info = db.prepare(
-    'INSERT INTO page_visits (user_pseudo,workspace_id,url,domain,category,title,start_time) VALUES (?,?,?,?,?,?,?)'
-  ).run(currentUser, wsId || currentWorkspace, url.slice(0, 2048), domain, category, title || '', now);
+  const info = stmt.visitInsert.run(currentUser, wsId || currentWorkspace, url.slice(0, 2048), domain, category, title || '', now);
   currentVisit = { visitId: info.lastInsertRowid, tabId, url, domain, category, startTime: now };
   sessionDomains.add(domain);
 }
@@ -270,7 +358,7 @@ function endCurrentVisit() {
   if (!currentVisit || !currentUser) return;
   const now = Date.now();
   const dur = now - currentVisit.startTime;
-  db.prepare('UPDATE page_visits SET end_time=?,duration=? WHERE id=?').run(now, dur, currentVisit.visitId);
+  stmt.visitUpdate.run(now, dur, currentVisit.visitId);
   currentVisit = null;
 }
 
@@ -333,7 +421,7 @@ function initAnalyticsTimers() {
     if (!currentUser || !analyticsEnabled) return;
     computeDailyMetrics();
     if (currentVisit) endCurrentVisit();  // re-open by recording a new start doesn't make sense; this saves intermediate state
-  }, 60000);
+  }, 300000);
 }
 
 function startAnalyticsForUser() {
@@ -343,6 +431,9 @@ function startAnalyticsForUser() {
   sessionDomains = new Set();
   sessionTabSwitches = 0;
   initAnalyticsTimers();
+  const cutoff = Date.now() - 90 * 86400000;
+  try { db.prepare('DELETE FROM page_visits WHERE start_time < ?').run(cutoff); } catch(e) {}
+  try { db.prepare('DELETE FROM history WHERE timestamp < ?').run(cutoff); } catch(e) {}
 }
 
 function stopAnalytics() {
@@ -362,15 +453,33 @@ function deleteAllAnalytics() {
 function getUser(p) { return db.prepare('SELECT * FROM users WHERE pseudo=?').get(p.toLowerCase()); }
 function getWorkspaces(p) { return db.prepare('SELECT * FROM workspaces WHERE user_pseudo=?').all(p); }
 function getWorkspace(p, id) { return db.prepare('SELECT * FROM workspaces WHERE id=? AND user_pseudo=?').get(id, p); }
-function getTabsDb(p, wsId) { return db.prepare('SELECT url, title FROM tabs WHERE user_pseudo=? AND workspace_id=?').all(p, wsId); }
-function saveTabsDb(p, wsId, list) {
-  const del = db.prepare('DELETE FROM tabs WHERE user_pseudo=? AND workspace_id=?');
-  const ins = db.prepare('INSERT INTO tabs (user_pseudo,workspace_id,url,title) VALUES (?,?,?,?)');
-  db.transaction(() => { del.run(p, wsId); list.forEach(t => ins.run(p, wsId, t.url, t.title)); })();
+function getTabsDb(p, wsId) {
+  try {
+    return db.prepare('SELECT url, title, position FROM tabs WHERE user_pseudo=? AND workspace_id=? ORDER BY position ASC, rowid ASC').all(p, wsId);
+  } catch(e) {
+    return db.prepare('SELECT url, title FROM tabs WHERE user_pseudo=? AND workspace_id=?').all(p, wsId);
+  }
+}
+function getWorkspaceState(p, wsId) {
+  try { return db.prepare('SELECT active_url, active_index FROM workspaces WHERE id=? AND user_pseudo=?').get(wsId, p); }
+  catch(e) { return null; }
+}
+function saveTabsDb(p, wsId, list, activeUrl, activeIndex) {
+  db.transaction(() => {
+    stmt.tabDelete.run(p, wsId);
+    list.forEach((t, i) => {
+      try { stmt.tabInsert.run(p, wsId, t.url, t.title, i); }
+      catch(e) { stmt.tabInsert.run(p, wsId, t.url, t.title); }
+    });
+    try {
+      db.prepare('UPDATE workspaces SET active_url=?, active_index=? WHERE id=? AND user_pseudo=?')
+        .run(activeUrl || (list[activeIndex || 0] ? list[activeIndex || 0].url : (list[0] ? list[0].url : null)), activeIndex || 0, wsId, p);
+    } catch(e) {}
+  })();
 }
 function getHistDb(p, wsId) { return db.prepare('SELECT url,title,timestamp FROM history WHERE user_pseudo=? AND workspace_id=? ORDER BY timestamp DESC LIMIT 200').all(p, wsId); }
 function getBmDb(p, wsId) { return db.prepare('SELECT url,title,timestamp FROM bookmarks WHERE user_pseudo=? AND workspace_id=? ORDER BY timestamp DESC').all(p, wsId); }
-function ensureDefaultWs(p) { if (!getWorkspace(p, 'default')) db.prepare('INSERT OR IGNORE INTO workspaces (id,user_pseudo,name,created) VALUES (?,?,?,?)').run('default', p, 'Default', Date.now()); }
+function ensureDefaultWs(p) { if (!getWorkspace(p, 'default')) db.prepare('INSERT OR IGNORE INTO workspaces (id,user_pseudo,name,created,color) VALUES (?,?,?,?,?)').run('default', p, 'Default', Date.now(), '#4a8bc5'); }
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -436,11 +545,15 @@ function buildMenu() {
       { label: 'Return to Workspaces', click: () => { saveUserTabsPersist(); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('return-to-workspaces'); } },
       { label: 'Return to Login', click: () => { saveUserTabsPersist(); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('return-to-login'); } },
       { type: 'separator' },
+      { label: 'Parameters', click: () => openParameters() },
+      { type: 'separator' },
       { label: 'Downloads', accelerator: 'CmdOrCtrl+J', click: () => toggleDownloads() },
+      { type: 'separator' },
+      { label: 'Take Notes', click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('toggle-notes'); } },
       { type: 'separator' },
       { label: 'Split', submenu: splitItems },
       { type: 'separator' },
-      { label: 'Quit', accelerator: 'Escape', click: () => app.quit() },
+      { label: 'Quit', accelerator: 'Escape', click: () => confirmQuit() },
     ],
   };
   const wsMenu = { label: 'Workspaces', submenu: [] };
@@ -491,24 +604,52 @@ function createWindow() {
 function contentBounds() {
   const b = mainWindow.getBounds();
   const pw = panelOpen ? PANEL_WIDTH : 0;
-  return { x: 0, y: TOP, width: b.width - pw, height: b.height - TOP - BOTTOM };
+  const top = TOP + suggestHeight;
+  return { x: 0, y: top, width: b.width - pw, height: Math.max(50, b.height - top - BOTTOM) };
 }
 
-function addTab(url, partition) {
+const blockList = ['*://*.doubleclick.net/*', '*://*.google-analytics.com/*', '*://*.facebook.com/tr*', '*://*.twitter.com/i/ads*', '*://*.amazon-adsystem.com/*'];
+const permCache = {};
+
+function setupSession(ses, wsId) {
+  if (ses._configured) return;
+  ses._configured = true;
+  ses.webRequest.onBeforeRequest({ urls: blockList }, (details, callback) => callback({ cancel: true }));
+  ses.setPermissionRequestHandler((wc, perm, cb) => {
+    const key = wsId + ':' + new URL(wc.getURL() || 'http://localhost').hostname + ':' + perm;
+    if (permCache[key] !== undefined) return cb(permCache[key]);
+    if (!mainWindow || mainWindow.isDestroyed()) return cb(false);
+    dialog.showMessageBox(mainWindow, { type: 'question', buttons: ['Allow', 'Deny'], defaultId: 1, title: 'Permission Request', message: `The site is requesting permission for: ${perm}` }).then(r => { permCache[key] = r.response === 0; cb(r.response === 0); });
+  });
+  ses.on('will-download', (e, item) => handleDownload(item, wsId));
+}
+
+function safeLoadURL(wc, url) {
+  const u = (url || '').trim();
+  if (!u || u === 'about:blank') return false;
+  try { wc.loadURL(u); return true; }
+  catch(e) {
+    try { wc.loadURL('https://www.google.com'); return true; }
+    catch(e2) { return false; }
+  }
+}
+
+function addTab(url, partition, silent) {
+  // partition may be omitted; silent may be passed as 2nd arg (boolean)
+  if (typeof partition === 'boolean') { silent = partition; partition = undefined; }
   const tabs = currentTabs();
   const id = idCounter++;
-  const wsPartition = partition || (currentWorkspace ? 'persist:ws_' + currentWorkspace : undefined);
+  const wsPartition = partition || (currentWorkspace ? 'persist:user_' + currentUser + '_ws_' + currentWorkspace : undefined);
   const view = new WebContentsView({
     webPreferences: { sandbox: true, spellcheck: false, partition: wsPartition, disableHtmlFullscreenWindowResize: false, backgroundThrottling: false },
   });
 
   const ses = view.webContents.session;
-  ses.setPermissionRequestHandler((wc, perm, cb) => cb(false));
   const wsId = currentWorkspace;
-  ses.on('will-download', (e, item) => handleDownload(item, wsId));
+  setupSession(ses, wsId);
 
   view.setBounds(contentBounds());
-  view.webContents.loadURL(url);
+  safeLoadURL(view.webContents, url);
   setupF11Handler(view.webContents);
   const emit = (event, extra) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(event, { id, title: view.webContents.getTitle(), url: view.webContents.getURL(), ws: wsId, ...extra });
@@ -521,18 +662,18 @@ function addTab(url, partition) {
       broadcastMediaState();
     }
   }
-  view.webContents.on('page-title-updated', (e, t) => { emit('tab-updated', { title: t, ws: currentWorkspace }); updatePlayingTabMeta(); saveUserTabsPersist(); });
-  view.webContents.on('page-favicon-updated', (e, favicons) => { if (favicons && favicons.length > 0) { const tab = tabs.find(t => t.id === id); if (tab) tab.favicon = favicons[0]; emit('tab-updated', { favicon: favicons[0], ws: currentWorkspace }); } });
+  view.webContents.on('page-title-updated', (e, t) => { emit('tab-updated', { title: t, ws: wsId }); updatePlayingTabMeta(); scheduleTabSave(); });
+  view.webContents.on('page-favicon-updated', (e, favicons) => { if (favicons && favicons.length > 0) { const tab = tabs.find(t => t.id === id); if (tab) tab.favicon = favicons[0]; emit('tab-updated', { favicon: favicons[0], ws: wsId }); } });
   function resetFavicon() { const tab = tabs.find(t => t.id === id); if (tab) tab.favicon = ''; }
-  view.webContents.on('did-navigate', (e, u) => { resetFavicon(); emit('tab-updated', { url: u, favicon: '', ws: currentWorkspace }); emitNav(); addHistory(u, view.webContents.getTitle()); saveUserTabsPersist(); if (u && u !== 'about:blank') { ensureSession(); recordVisitStart(id, u, view.webContents.getTitle(), currentWorkspace); } });
-  view.webContents.on('did-navigate-in-page', (e, u) => { if (e.isMainFrame) { resetFavicon(); emit('tab-updated', { url: u, favicon: '', ws: currentWorkspace }); emitNav(); addHistory(u, view.webContents.getTitle()); saveUserTabsPersist(); if (u && u !== 'about:blank') { ensureSession(); recordVisitStart(id, u, view.webContents.getTitle(), currentWorkspace); } } });
+  view.webContents.on('did-navigate', (e, u) => { resetFavicon(); emit('tab-updated', { url: u, favicon: '', ws: wsId }); emitNav(); addHistory(u, view.webContents.getTitle(), wsId); scheduleTabSave(); if (u && u !== 'about:blank') { ensureSession(); recordVisitStart(id, u, view.webContents.getTitle(), wsId); } });
+  view.webContents.on('did-navigate-in-page', (e, u) => { if (e.isMainFrame) { resetFavicon(); emit('tab-updated', { url: u, favicon: '', ws: wsId }); emitNav(); addHistory(u, view.webContents.getTitle(), wsId); scheduleTabSave(); if (u && u !== 'about:blank') { ensureSession(); recordVisitStart(id, u, view.webContents.getTitle(), wsId); } } });
   view.webContents.on('did-start-loading', () => emit('tab-loading', { loading: true }));
   view.webContents.on('did-stop-loading', () => { emit('tab-loading', { loading: false }); emitNav(); });
   view.webContents.on('update-target-url', (e, u) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('status-url', u || ''); });
   view.webContents.on('found-in-page', (e, result) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('find-result', result); });
 
   view.webContents.on('media-started-playing', () => {
-    playingTabs.set(id, { title: view.webContents.getTitle(), url: view.webContents.getURL(), workspaceId: currentWorkspace });
+    playingTabs.set(id, { title: view.webContents.getTitle(), url: view.webContents.getURL(), workspaceId: wsId });
     updatePowerSaveBlocker();
     broadcastMediaState();
   });
@@ -566,32 +707,172 @@ function addTab(url, partition) {
 
   tabs.push({ id, view, url, title: '', favicon: '' });
   setCurrentTabs(tabs);
+  // Newly created tab becomes active immediately (content + highlight + URL bar)
   setActiveId(currentWorkspace, id);
+  if (silent) return id;
   syncViews();
   broadcastTabs();
+  emitTabActivated(currentWorkspace, id);
   saveUserTabsPersist();
   return id;
+}
+
+// Restore all tabs for a workspace from DB in original order, landing on the
+// previously active tab. silent=true skips per-tab saves (single save at end).
+function restoreWorkspaceFromDb(wsId, opts) {
+  const silent = !(opts && opts.save === true);
+  const shouldShow = (opts && opts.show) || wsId === currentWorkspace;
+  const saved = getTabsDb(currentUser, wsId);
+  const state = getWorkspaceState(currentUser, wsId);
+  workspaceTabs[wsId] = [];
+  if (!saved || saved.length === 0) {
+    const prev = currentWorkspace;
+    currentWorkspace = wsId;
+    const id = addTab('https://www.google.com', undefined, true);
+    setActiveId(wsId, id);
+    currentWorkspace = prev;
+    if (shouldShow) {
+      const p2 = currentWorkspace;
+      currentWorkspace = wsId;
+      syncViews();
+      broadcastTabs();
+      emitTabActivated(wsId, id);
+      currentWorkspace = p2;
+      if (p2 !== wsId) syncViews();
+    }
+    if (!silent) saveUserTabsPersist();
+    return id;
+  }
+  const prev = currentWorkspace;
+  currentWorkspace = wsId;
+  const createdIds = [];
+  saved.forEach(s => {
+    if (!s.url) return;
+    createdIds.push(addTab(s.url, undefined, true));
+  });
+  // Pick active: saved active_url / active_index, fallback to first
+  let activeIdx = 0;
+  if (state) {
+    if (typeof state.active_index === 'number' && state.active_index >= 0 && state.active_index < createdIds.length) {
+      activeIdx = state.active_index;
+    }
+    if (state.active_url) {
+      const byUrl = saved.findIndex(s => s.url === state.active_url);
+      if (byUrl >= 0 && byUrl < createdIds.length) activeIdx = byUrl;
+    }
+  }
+  const activeId = createdIds[activeIdx] != null ? createdIds[activeIdx] : createdIds[0];
+  setActiveId(wsId, activeId);
+  currentWorkspace = prev;
+  if (shouldShow) {
+    const p2 = currentWorkspace;
+    currentWorkspace = wsId;
+    syncViews();
+    broadcastTabs();
+    emitTabActivated(wsId, activeId);
+    currentWorkspace = p2;
+    if (p2 !== wsId) syncViews();
+  }
+  if (!silent) saveUserTabsPersist();
+  return activeId;
+}
+
+// Preload every other workspace in the background so switching later is
+// instant (pages already loaded, cookies/session already warm — no reload flash).
+function preloadOtherWorkspacesInBackground() {
+  if (!currentUser) return;
+  try {
+    const all = getWorkspaces(currentUser).map(w => w.id);
+    const others = all.filter(id => id !== currentWorkspace && !workspaceTabs[id]);
+    others.forEach((wsId, i) => {
+      setTimeout(() => {
+        if (!currentUser || workspaceTabs[wsId]) return;
+        try { restoreWorkspaceFromDb(wsId, {}); } catch(e) {}
+      }, 900 + i * 600);
+    });
+  } catch(e) {}
 }
 
 function addHistory(url, title, wsId) {
   const id = wsId || currentWorkspace;
   if (!currentUser || !id || !url || url === 'about:blank') return;
-  db.prepare('INSERT INTO history (user_pseudo,workspace_id,url,title,timestamp) VALUES (?,?,?,?,?)').run(currentUser, id, url, title||url, Date.now());
+  stmt.historyInsert.run(currentUser, id, url, title||url, Date.now());
+}
+
+function snapshotTabsForWs(wsId, tabs) {
+  // Build a clean snapshot: never overwrite a good saved URL with about:blank / empty
+  // (happens when save races a fresh addTab before load commits).
+  const list = (tabs || []).map(t => {
+    let liveUrl = '';
+    let liveTitle = '';
+    try { liveUrl = t.view.webContents.getURL() || ''; } catch(e) { liveUrl = ''; }
+    try { liveTitle = t.view.webContents.getTitle() || ''; } catch(e) { liveTitle = ''; }
+    const fallbackUrl = t.url || '';
+    const url = (liveUrl && liveUrl !== 'about:blank') ? liveUrl : fallbackUrl;
+    if (!url) return null;
+    return { url, title: liveTitle || t.title || url };
+  }).filter(Boolean);
+  return list;
 }
 
 function saveUserTabsPersist() {
-  const tabs = currentTabs();
-  if (!currentUser || !currentWorkspace || !tabs.length) return;
-  saveTabsDb(currentUser, currentWorkspace, tabs.map(t => ({ url: t.view.webContents.getURL(), title: t.view.webContents.getTitle() })));
+  if (!currentUser || !db) return;
+  try {
+    for (const [wsId, tabs] of Object.entries(workspaceTabs)) {
+      if (!tabs || tabs.length === 0) continue;
+      const list = snapshotTabsForWs(wsId, tabs);
+      if (list.length === 0) continue;
+      // Active tab: index + URL so restore lands on the same page, same order
+      const activeId = getActiveId(wsId);
+      let activeIndex = list.length > 0 ? 0 : 0;
+      let activeUrl = list[0] ? list[0].url : null;
+      if (activeId != null) {
+        const liveActive = tabs.find(t => t.id === activeId);
+        if (liveActive) {
+          let u = '';
+          try { u = liveActive.view.webContents.getURL() || liveActive.url || ''; } catch(e) { u = liveActive.url || ''; }
+          if (u && u !== 'about:blank') {
+            activeUrl = u;
+            const idx = list.findIndex(x => x.url === u);
+            activeIndex = idx >= 0 ? idx : 0;
+          } else {
+            const idx = tabs.indexOf(liveActive);
+            activeIndex = Math.max(0, Math.min(idx, list.length - 1));
+            activeUrl = list[activeIndex] ? list[activeIndex].url : activeUrl;
+          }
+        }
+      }
+      saveTabsDb(currentUser, wsId, list, activeUrl, activeIndex);
+    }
+  } catch(e) { console.error('saveUserTabsPersist error:', e); }
+}
+
+let tabSaveDebounce = null;
+function scheduleTabSave() {
+  if (tabSaveDebounce) clearTimeout(tabSaveDebounce);
+  tabSaveDebounce = setTimeout(() => { tabSaveDebounce = null; saveUserTabsPersist(); }, 1200);
+}
+
+function getAutoCloseSeconds() {
+  if (!currentUser) return null;
+  const u = getUser(currentUser);
+  if (!u) return null;
+  if (u.auto_close === 0) return null;
+  const secs = Number(u.auto_close_seconds) || DEFAULT_AUTO_CLOSE_SECONDS;
+  return secs > 0 ? secs : DEFAULT_AUTO_CLOSE_SECONDS;
 }
 
 function resetIdleTimer() {
   if (idleTimeout) clearTimeout(idleTimeout);
+  idleTimeout = null;
+  if (!currentUser) return;
+  const secs = getAutoCloseSeconds();
+  if (!secs) return;
   idleTimeout = setTimeout(() => {
     if (!currentUser) return;
     saveUserTabsPersist();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('return-to-login');
-  }, IDLE_TIMEOUT_MS);
+  }, secs * 1000);
 }
 
 function showTab(id) {
@@ -617,28 +898,44 @@ function closeTab(id) {
   playingTabs.delete(id);
   updatePowerSaveBlocker();
   broadcastMediaState();
+  const wasActive = getActiveId(currentWorkspace) === id;
   tabs.splice(idx, 1);
   setCurrentTabs(tabs);
-  if (getActiveId(currentWorkspace) === id) {
+  if (wasActive) {
     const next = tabs[Math.min(idx, tabs.length - 1)];
     setActiveId(currentWorkspace, next.id);
   }
   syncViews();
   broadcastTabs();
+  // New active (next neighbour) takes over immediately
+  if (wasActive) emitTabActivated(currentWorkspace, getActiveId(currentWorkspace));
   saveUserTabsPersist();
 }
 
 function broadcastTabs() {
   const tabs = currentTabs();
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tabs-list', { ws: currentWorkspace, tabs: tabs.map(t => ({ id: t.id, url: t.view.webContents.getURL(), title: t.view.webContents.getTitle(), favicon: t.favicon || '' })) });
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tabs-list', { ws: currentWorkspace, activeId: getActiveId(currentWorkspace), tabs: tabs.map(t => {
+    let u = ''; try { u = t.view.webContents.getURL(); } catch(e) { u = t.url || ''; }
+    let ti = ''; try { ti = t.view.webContents.getTitle(); } catch(e) { ti = t.title || ''; }
+    return { id: t.id, url: u || t.url || '', title: ti || t.title || '', favicon: t.favicon || '' };
+  }) });
+}
+
+function emitTabActivated(wsId, id) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const tabs = workspaceTabs[wsId] || [];
+  const tab = tabs.find(t => t.id === id);
+  if (!tab) return;
+  let u = ''; let ti = '';
+  try { u = tab.view.webContents.getURL(); } catch(e) { u = tab.url || ''; }
+  try { ti = tab.view.webContents.getTitle(); } catch(e) { ti = tab.title || ''; }
+  mainWindow.webContents.send('tab-activated', { id, url: u || tab.url || '', title: ti || tab.title || '', favicon: tab.favicon || '', ws: wsId });
 }
 
 function activeTab() { return getActiveTab(currentWorkspace); }
 
 function hideAllViews() {
-  Object.values(workspaceTabs).forEach(tabs => {
-    tabs.forEach(t => { try { mainWindow.contentView.removeChildView(t.view); } catch(e) {} });
-  });
+  removeShownViews();
 }
 
 function showActiveView() { syncViews(); }
@@ -662,10 +959,11 @@ function openBrowser(workspaceId) {
   buildMenu();
 
   if (!workspaceTabs[currentWorkspace]) {
-    const savedTabs = getTabsDb(currentUser, currentWorkspace);
-    workspaceTabs[currentWorkspace] = [];
-    if (savedTabs.length > 0) savedTabs.forEach(t => addTab(t.url));
-    else addTab('https://www.google.com');
+    restoreWorkspaceFromDb(currentWorkspace, { show: true, save: false });
+    syncViews();
+    broadcastTabs();
+    // Warm up all other workspaces so they open instantly with no reload
+    preloadOtherWorkspacesInBackground();
   } else {
     syncViews();
     broadcastTabs();
@@ -673,6 +971,8 @@ function openBrowser(workspaceId) {
   resetIdleTimer();
   if (autoSaveInterval) clearInterval(autoSaveInterval);
   autoSaveInterval = setInterval(saveUserTabsPersist, 30000);
+  // Open any links Windows sent us before the browser was ready
+  flushPendingExternalUrls();
 }
 
 async function switchWorkspace(workspaceId) {
@@ -687,10 +987,9 @@ async function switchWorkspace(workspaceId) {
   db.prepare('UPDATE users SET active_workspace = ? WHERE pseudo = ?').run(workspaceId, currentUser);
 
   if (!workspaceTabs[workspaceId]) {
-    const savedTabs = getTabsDb(currentUser, workspaceId);
-    workspaceTabs[workspaceId] = [];
-    if (savedTabs.length > 0) savedTabs.forEach(t => addTab(t.url));
-    else addTab('https://www.google.com');
+    restoreWorkspaceFromDb(workspaceId, { show: true, save: false });
+    syncViews();
+    broadcastTabs();
   } else {
     const tabs = workspaceTabs[workspaceId];
     if (!tabs.find(t => t.id === getActiveId(workspaceId))) {
@@ -702,7 +1001,7 @@ async function switchWorkspace(workspaceId) {
   resetIdleTimer();
   buildMenu();
   const ws = getWorkspace(currentUser, workspaceId);
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('workspace-switched', { id: workspaceId, name: ws ? ws.name : '' });
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('workspace-switched', { id: workspaceId, name: ws ? ws.name : '', color: ws ? (ws.color || '#4a8bc5') : '#4a8bc5' });
   broadcastMediaState();
 }
 
@@ -719,6 +1018,7 @@ function destroyAllTabsForUser() {
   splitMode = false;
   splitLeft = null;
   splitRight = null;
+
   playingTabs.clear();
   updatePowerSaveBlocker();
   broadcastMediaState();
@@ -732,12 +1032,19 @@ function setupContextMenu(wc) {
     if (params.linkURL) {
       template.push({ label: 'Open Link in New Tab', click: () => addTab(params.linkURL) });
       template.push({ label: 'Open Link in New Window', click: () => shell.openExternal(params.linkURL) });
+      template.push({ label: 'Save Link As…', click: () => saveUrlAs(wc, params.linkURL) });
       template.push({ label: 'Copy Link Address', click: () => clipboard.writeText(params.linkURL) });
       template.push({ type: 'separator' });
     }
     if (params.mediaType === 'image') {
+      template.push({ label: 'Open Image in New Tab', click: () => addTab(params.srcURL) });
+      template.push({ label: 'Save Image As…', click: () => saveUrlAs(wc, params.srcURL) });
       template.push({ label: 'Copy Image', click: () => wc.copyImageAt(params.x, params.y) });
       template.push({ label: 'Copy Image Address', click: () => clipboard.writeText(params.srcURL) });
+      template.push({ type: 'separator' });
+    }
+    if (params.mediaType === 'video' || params.mediaType === 'audio') {
+      template.push({ label: 'Save Media As…', click: () => saveUrlAs(wc, params.srcURL) });
       template.push({ type: 'separator' });
     }
     if (params.editFlags.canCut && params.selectionText) template.push({ label:'Cut', role:'cut' });
@@ -762,9 +1069,37 @@ let dlItemsMap = {};
 let downloadIdCounter = 0;
 const deletedDlSavePaths = new Set();
 const deletedDlIds = new Set();
+const pendingSavePaths = new Map();
 
 function sanitizeFilename(name) {
   return name.replace(/[<>:"\/\\|?*]/g, '_').trim();
+}
+
+function filenameFromUrl(u) {
+  try {
+    const parsed = new URL(u);
+    let name = decodeURIComponent(path.basename(parsed.pathname)) || 'download';
+    if (!path.extname(name)) name += '.png';
+    return sanitizeFilename(name) || 'download.png';
+  } catch (e) {
+    return 'download_' + Date.now() + '.png';
+  }
+}
+
+async function saveUrlAs(wc, url) {
+  if (!url || /^(blob:|filesystem:)/i.test(url)) return;
+  let filePath;
+  try {
+    const r = await dialog.showSaveDialog(mainWindow, { defaultPath: path.join(app.getPath('downloads'), filenameFromUrl(url)) });
+    if (r.canceled || !r.filePath) return;
+    filePath = r.filePath;
+  } catch (e) { return; }
+  try {
+    pendingSavePaths.set(url, filePath);
+    wc.downloadURL(url);
+  } catch (e) {
+    pendingSavePaths.delete(url);
+  }
 }
 
 function handleDownload(item, wsId) {
@@ -774,7 +1109,12 @@ function handleDownload(item, wsId) {
   const total = item.getTotalBytes();
   const url = item.getURL();
   const dlId = downloadIdCounter++;
-  const savePath = path.join(app.getPath('downloads'), name);
+  let savePath = path.join(app.getPath('downloads'), name);
+  if (url && pendingSavePaths.has(url)) {
+    savePath = pendingSavePaths.get(url);
+    pendingSavePaths.delete(url);
+    name = sanitizeFilename(path.basename(savePath)) || name;
+  }
   if (!downloadsByWs[dlWsId]) downloadsByWs[dlWsId] = [];
   downloadsByWs[dlWsId].push({ id: dlId, name, total, received: 0, speed: 0, start: Date.now(), done: false, success: false, canceled: false, url, savePath, ws: dlWsId });
   const entry = downloadsByWs[dlWsId][downloadsByWs[dlWsId].length - 1];
@@ -1035,7 +1375,7 @@ let settingsWindow = null;
 ipcMain.on('open-settings', () => {
   if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.focus(); return; }
   settingsWindow = new BrowserWindow({
-    width: 400, height: 580, parent: mainWindow, modal: true,
+    width: 400, height: 680, parent: mainWindow, modal: true,
     title: 'Settings - AEGIS', backgroundColor: '#0f0f1a',
     icon: findIcon() || undefined, resizable: false,
     webPreferences: {
@@ -1046,7 +1386,150 @@ ipcMain.on('open-settings', () => {
   settingsWindow.on('closed', () => { settingsWindow = null; });
 });
 
-app.whenReady().then(() => { initDB(); createWindow(); });
+ipcMain.on('open-parameters', () => { openParameters(); });
+
+// ── Parameters Window ──
+
+let parametersWindow = null;
+function openParameters() {
+  if (parametersWindow && !parametersWindow.isDestroyed()) { parametersWindow.focus(); return; }
+  parametersWindow = new BrowserWindow({
+    width: 400, height: 420, parent: mainWindow, modal: true,
+    title: 'Parameters - AEGIS', backgroundColor: '#0f0f1a',
+    icon: findIcon() || undefined, resizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false,
+    },
+  });
+  parametersWindow.loadFile('parameters.html');
+  parametersWindow.on('closed', () => { parametersWindow = null; });
+}
+
+// ── Auto-Close IPC ──
+
+ipcMain.handle('get-auto-close', () => {
+  if (!currentUser) return { enabled: !!DEFAULT_AUTO_CLOSE, seconds: DEFAULT_AUTO_CLOSE_SECONDS };
+  const u = getUser(currentUser);
+  const enabled = u ? u.auto_close !== 0 : !!DEFAULT_AUTO_CLOSE;
+  const seconds = u && u.auto_close_seconds ? Number(u.auto_close_seconds) : DEFAULT_AUTO_CLOSE_SECONDS;
+  return { enabled, seconds };
+});
+
+ipcMain.handle('set-auto-close', (e, enabled, minutes) => {
+  if (!currentUser) return { ok: false, error: 'Not signed in.' };
+  let secs = DEFAULT_AUTO_CLOSE_SECONDS;
+  if (minutes !== undefined && minutes !== null) {
+    const n = Number(minutes);
+    if (!isNaN(n) && n > 0) secs = Math.round(n * 60);
+  }
+  db.prepare('UPDATE users SET auto_close=?, auto_close_seconds=? WHERE pseudo=?').run(enabled ? 1 : 0, secs, currentUser);
+  resetIdleTimer();
+  return { ok: true };
+});
+
+// ── Default Browser IPC ──
+
+const APP_PROGID = 'AEGISURL.HTTP';
+
+function regQuery(key) {
+  return new Promise((resolve) => {
+    execFile('reg', ['query', key], { windowsHide: true }, (err, stdout) => resolve(err ? null : (stdout || null)));
+  });
+}
+
+function regAdd(args) {
+  return new Promise((resolve) => {
+    execFile('reg', ['add'].concat(args), { windowsHide: true }, (err) => resolve(!err));
+  });
+}
+
+async function getUserChoiceProgId(proto) {
+  const out = await regQuery('HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\' + proto + '\\UserChoice');
+  if (!out) return null;
+  const m = out.match(/ProgId\s+REG_SZ\s+(\S+)/i);
+  return m ? m[1] : null;
+}
+
+ipcMain.handle('get-default-browser-status', async () => {
+  if (process.platform !== 'win32') return { isDefault: false, supported: false };
+  const httpId = await getUserChoiceProgId('http');
+  const httpsId = await getUserChoiceProgId('https');
+  const isDefault = httpId === APP_PROGID || httpsId === APP_PROGID;
+  // No UserChoice recorded (older setups): check who owns the http open command
+  if (!isDefault && !httpId) {
+    const out = await regQuery('HKCU\\Software\\Classes\\http\\shell\\open\\command');
+    const exeName = path.basename(process.execPath).toLowerCase();
+    if (out && out.toLowerCase().indexOf(exeName) !== -1) return { isDefault: true, supported: true };
+  }
+  return { isDefault, supported: true };
+});
+
+ipcMain.handle('set-default-browser', async () => {
+  try { app.setAsDefaultProtocolClient('http'); } catch (e) {}
+  try { app.setAsDefaultProtocolClient('https'); } catch (e) {}
+  if (process.platform === 'win32') {
+    const exe = process.execPath;
+    // Register a proper ProgId + capabilities entry so Windows Settings can
+    // list AEGIS and deep-link straight to its default-apps page
+    await regAdd(['HKCU\\Software\\Classes\\' + APP_PROGID, '/ve', '/d', 'AEGIS URL', '/f']);
+    await regAdd(['HKCU\\Software\\Classes\\' + APP_PROGID, '/v', 'URL Protocol', '/d', '', '/f']);
+    await regAdd(['HKCU\\Software\\Classes\\' + APP_PROGID + '\\shell\\open\\command', '/ve', '/d', '"' + exe + '" "%1"', '/f']);
+    await regAdd(['HKCU\\Software\\AEGIS\\Capabilities', '/v', 'ApplicationName', '/d', 'AEGIS', '/f']);
+    await regAdd(['HKCU\\Software\\AEGIS\\Capabilities', '/v', 'ApplicationDescription', '/d', 'AEGIS Privacy Browser', '/f']);
+    await regAdd(['HKCU\\Software\\AEGIS\\Capabilities\\URLAssociations', '/v', 'http', '/d', APP_PROGID, '/f']);
+    await regAdd(['HKCU\\Software\\AEGIS\\Capabilities\\URLAssociations', '/v', 'https', '/d', APP_PROGID, '/f']);
+    await regAdd(['HKCU\\Software\\RegisteredApplications', '/v', 'AEGIS', '/d', 'Software\\AEGIS\\Capabilities', '/f']);
+    // Windows 10/11 protect defaults: the user confirms the choice once in Windows Settings
+    try { await shell.openExternal('ms-settings:defaultapps?registeredApp=AEGIS'); }
+    catch (e) { try { await shell.openExternal('ms-settings:defaultapps'); } catch (e2) {} }
+  }
+  return { ok: true };
+});
+
+// ── Network speed IPC ──
+
+ipcMain.handle('get-net-prefs', () => ({ secureDns: !!netPrefs.secureDns }));
+
+ipcMain.handle('set-net-prefs', (e, prefs) => {
+  try {
+    if (prefs && typeof prefs.secureDns === 'boolean') netPrefs.secureDns = prefs.secureDns;
+    fs.writeFileSync(NET_PREFS_PATH, JSON.stringify(netPrefs));
+    return { ok: true, secureDns: !!netPrefs.secureDns };
+  } catch (err) { return { ok: false, error: 'Could not save network settings.' }; }
+});
+
+// ── External links (AEGIS registered as default browser) ──
+
+let pendingExternalUrls = [];
+function isWebUrl(u) { return typeof u === 'string' && /^https?:\/\//i.test(u.trim()); }
+function extractUrlFromArgv(argv) {
+  for (const a of (argv || [])) { if (isWebUrl(a)) return a.trim(); }
+  return null;
+}
+function browserReady() {
+  return !!(currentUser && currentWorkspace && mainWindow && !mainWindow.isDestroyed() && workspaceTabs[currentWorkspace]);
+}
+function handleExternalUrl(url) {
+  if (!isWebUrl(url)) return;
+  if (browserReady()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    addTab(url);
+  } else {
+    // Still on the login/workspace screen — open once the browser is ready
+    pendingExternalUrls.push(url);
+  }
+}
+function flushPendingExternalUrls() {
+  if (!pendingExternalUrls.length || !browserReady()) return;
+  const urls = pendingExternalUrls;
+  pendingExternalUrls = [];
+  urls.forEach(u => addTab(u));
+}
+const startupExternalUrl = extractUrlFromArgv(process.argv);
+if (startupExternalUrl) pendingExternalUrls.push(startupExternalUrl);
+
+app.whenReady().then(() => { initDB(); prepareStatements(); createWindow(); });
 
 // ── Auth IPC ──
 
@@ -1076,6 +1559,7 @@ ipcMain.handle('logout', () => {
   currentWorkspace = null;
   idCounter = 0;
   splitMode = false; splitLeft = null; splitRight = null;
+  invalidateBookmarkCache();
   if (autoSaveInterval) { clearInterval(autoSaveInterval); autoSaveInterval = null; }
   if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
   Menu.setApplicationMenu(null);
@@ -1120,6 +1604,7 @@ ipcMain.handle('login-guest', async () => {
   activeIdPerWorkspace = {};
   idCounter = 0;
   splitMode = false; splitLeft = null; splitRight = null;
+
   if (autoSaveInterval) { clearInterval(autoSaveInterval); autoSaveInterval = null; }
   if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
   if (db) { try { db.close(); } catch(e) {} }
@@ -1128,6 +1613,8 @@ ipcMain.handle('login-guest', async () => {
   await session.defaultSession.clearStorageData();
   await session.defaultSession.clearAuthCache();
   initDB();
+  prepareStatements();
+  invalidateBookmarkCache();
   const guestPseudo = 'Guest_' + Date.now().toString(36);
   const key = guestPseudo.toLowerCase();
   const { salt, hash } = hashPassword('guest');
@@ -1147,6 +1634,13 @@ ipcMain.handle('get-history', (e, wsId) => {
   return getHistDb(currentUser, id);
 });
 
+ipcMain.handle('clear-history', (e, wsId) => {
+  const id = wsId || currentWorkspace;
+  if (!currentUser || !id) return { ok: false };
+  db.prepare('DELETE FROM history WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
+  return { ok: true };
+});
+
 // ── Bookmarks IPC ──
 
 ipcMain.handle('get-bookmarks', () => {
@@ -1156,20 +1650,65 @@ ipcMain.handle('get-bookmarks', () => {
 
 ipcMain.handle('add-bookmark', (e, url, title) => {
   if (!currentUser || !currentWorkspace) return { ok: false };
-  if (db.prepare('SELECT id FROM bookmarks WHERE user_pseudo=? AND workspace_id=? AND url=?').get(currentUser, currentWorkspace, url)) return { ok: false, error: 'Already bookmarked.' };
-  db.prepare('INSERT INTO bookmarks (user_pseudo,workspace_id,url,title,timestamp) VALUES (?,?,?,?,?)').run(currentUser, currentWorkspace, url, title||url, Date.now());
+  if (stmt.bookmarkCheck.get(currentUser, currentWorkspace, url)) return { ok: false, error: 'Already bookmarked.' };
+  stmt.bookmarkInsert.run(currentUser, currentWorkspace, url, title||url, Date.now());
+  invalidateBookmarkCache();
   return { ok: true };
 });
 
 ipcMain.handle('remove-bookmark', (e, url) => {
   if (!currentUser || !currentWorkspace) return { ok: false };
-  db.prepare('DELETE FROM bookmarks WHERE user_pseudo=? AND workspace_id=? AND url=?').run(currentUser, currentWorkspace, url);
+  stmt.bookmarkDelete.run(currentUser, currentWorkspace, url);
+  invalidateBookmarkCache();
   return { ok: true };
 });
 
 ipcMain.handle('is-bookmarked', (e, url) => {
   if (!currentUser || !currentWorkspace) return false;
-  return !!db.prepare('SELECT id FROM bookmarks WHERE user_pseudo=? AND workspace_id=? AND url=?').get(currentUser, currentWorkspace, url);
+  const key = bookmarkKey(currentUser, currentWorkspace, url);
+  if (bookmarkCache.has(key)) return bookmarkCache.get(key);
+  const v = !!stmt.bookmarkCheck.get(currentUser, currentWorkspace, url);
+  bookmarkCache.set(key, v);
+  return v;
+});
+
+// ── Notes ──
+
+function notesReady() { return !!currentUser && !!db && !!stmt.noteList; }
+
+ipcMain.handle('get-notes', () => {
+  if (!notesReady()) return [];
+  try { return stmt.noteList.all(currentUser); } catch(e) { return []; }
+});
+
+ipcMain.handle('add-note', (e, content) => {
+  const text = (content || '').trim();
+  if (!notesReady()) return { ok: false, error: 'Not logged in.' };
+  if (!text) return { ok: false, error: 'Note is empty.' };
+  const now = Date.now();
+  try {
+    const info = stmt.noteInsert.run(currentUser, text, now, now);
+    return { ok: true, note: { id: info.lastInsertRowid, content: text, created: now, updated: now } };
+  } catch(err) { return { ok: false, error: 'Could not save the note.' }; }
+});
+
+ipcMain.handle('update-note', (e, id, content) => {
+  const text = (content || '').trim();
+  if (!notesReady()) return { ok: false, error: 'Not logged in.' };
+  if (!text) return { ok: false, error: 'Note is empty.' };
+  try {
+    const info = stmt.noteUpdate.run(text, Date.now(), id, currentUser);
+    return { ok: info.changes > 0 };
+  } catch(err) { return { ok: false, error: 'Could not update the note.' }; }
+});
+
+ipcMain.handle('delete-note', (e, id) => {
+  if (!notesReady()) return { ok: false, error: 'Not logged in.' };
+  try {
+    const info = stmt.noteDelete.run(id, currentUser);
+    if (info.changes > 0) return { ok: true };
+    return { ok: false, error: 'Could not delete the note.' };
+  } catch(err) { return { ok: false, error: 'Could not delete the note.' }; }
 });
 
 // ── Workspace IPC ──
@@ -1177,7 +1716,10 @@ ipcMain.handle('is-bookmarked', (e, url) => {
 ipcMain.handle('get-workspaces', () => {
   if (!currentUser) return [];
   ensureDefaultWs(currentUser);
-  return getWorkspaces(currentUser).map(w => ({ id: w.id, name: w.name, created: w.created, tabCount: getTabsDb(currentUser, w.id).length }));
+  const tabCounts = db.prepare('SELECT workspace_id, COUNT(*) as cnt FROM tabs WHERE user_pseudo=? GROUP BY workspace_id').all(currentUser);
+  const countMap = Object.create(null);
+  tabCounts.forEach(r => countMap[r.workspace_id] = r.cnt);
+  return getWorkspaces(currentUser).map(w => ({ id: w.id, name: w.name, created: w.created, color: w.color || '#4a8bc5', tabCount: countMap[w.id] || 0 }));
 });
 
 ipcMain.handle('get-active-workspace', () => {
@@ -1186,14 +1728,17 @@ ipcMain.handle('get-active-workspace', () => {
   if (!user) return null;
   const id = user.active_workspace || 'default';
   const ws = getWorkspace(currentUser, id);
-  return { id, name: ws ? ws.name : 'Default' };
+  return { id, name: ws ? ws.name : 'Default', color: ws ? (ws.color || '#4a8bc5') : '#4a8bc5' };
 });
 
 ipcMain.handle('create-workspace', (e, name) => {
   if (!currentUser) return { ok: false, error: 'Not logged in.' };
   const id = 'ws_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-  db.prepare('INSERT INTO workspaces (id,user_pseudo,name,created) VALUES (?,?,?,?)').run(id, currentUser, name, Date.now());
-  return { ok: true, id };
+  const wsColors = ['#4a8bc5','#7a5db5','#48bb78','#e5834a','#e56a6a','#4ac5b5','#c5a84a','#9b5de5'];
+  const existing = getWorkspaces(currentUser).length;
+  const color = wsColors[existing % wsColors.length];
+  db.prepare('INSERT INTO workspaces (id,user_pseudo,name,created,color) VALUES (?,?,?,?,?)').run(id, currentUser, name, Date.now(), color);
+  return { ok: true, id, color };
 });
 
 ipcMain.handle('rename-workspace', (e, id, name) => {
@@ -1215,10 +1760,13 @@ ipcMain.handle('delete-workspace', (e, id) => {
   for (const [tabId, info] of playingTabs) { if (info.workspaceId === id) playingTabs.delete(tabId); }
   updatePowerSaveBlocker();
   broadcastMediaState();
-  db.prepare('DELETE FROM tabs WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
-  db.prepare('DELETE FROM history WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
-  db.prepare('DELETE FROM bookmarks WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
-  db.prepare('DELETE FROM workspaces WHERE id=? AND user_pseudo=?').run(id, currentUser);
+  db.transaction(() => {
+    db.prepare('DELETE FROM tabs WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
+    db.prepare('DELETE FROM history WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
+    db.prepare('DELETE FROM bookmarks WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
+    db.prepare('DELETE FROM workspaces WHERE id=? AND user_pseudo=?').run(id, currentUser);
+  })();
+  invalidateBookmarkCache();
   const user = getUser(currentUser);
   if (user && user.active_workspace === id) {
     const remaining = getWorkspaces(currentUser);
@@ -1252,10 +1800,16 @@ function enterSplitMode(rightWsId) {
   if (!getWorkspace(currentUser, rightWsId)) return false;
   if (!workspaceTabs[rightWsId]) {
     const savedTabs = getTabsDb(currentUser, rightWsId);
+    const st = getWorkspaceState(currentUser, rightWsId);
     workspaceTabs[rightWsId] = [];
-    savedTabs.forEach(t => addTabToSplit(t.url, rightWsId));
+    savedTabs.forEach(t => { if (t.url) addTabToSplit(t.url, rightWsId); });
     if (workspaceTabs[rightWsId].length === 0) addTabToSplit('https://www.google.com', rightWsId);
-    if (!getActiveId(rightWsId)) setActiveId(rightWsId, workspaceTabs[rightWsId][0]?.id);
+    // Restore previously active tab for consistency
+    if (st && st.active_url) {
+      const idx = (savedTabs || []).findIndex(s => s.url === st.active_url);
+      if (idx >= 0 && workspaceTabs[rightWsId][idx]) setActiveId(rightWsId, workspaceTabs[rightWsId][idx].id);
+      else if (!getActiveId(rightWsId)) setActiveId(rightWsId, workspaceTabs[rightWsId][0]?.id);
+    } else if (!getActiveId(rightWsId)) setActiveId(rightWsId, workspaceTabs[rightWsId][0]?.id);
   }
   splitMode = true;
   splitLeft = currentWorkspace;
@@ -1307,13 +1861,12 @@ function addTabToSplit(url, wsId) {
   const tabs = workspaceTabs[wsId] || [];
   const id = idCounter++;
   const view = new WebContentsView({
-    webPreferences: { sandbox: true, spellcheck: false, partition: 'persist:ws_' + wsId, disableHtmlFullscreenWindowResize: false, backgroundThrottling: false },
+    webPreferences: { sandbox: true, spellcheck: false, partition: 'persist:user_' + currentUser + '_ws_' + wsId, disableHtmlFullscreenWindowResize: false, backgroundThrottling: false },
   });
   const ses = view.webContents.session;
-  ses.setPermissionRequestHandler((wc, perm, cb) => cb(false));
-  ses.on('will-download', (e, item) => handleDownload(item, wsId));
+  setupSession(ses, wsId);
   view.setBounds({ x:0, y:TOP, width:100, height:100 });
-  view.webContents.loadURL(url);
+  safeLoadURL(view.webContents, url);
   setupF11Handler(view.webContents);
   const emit = (event, extra) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(event, { id, title: view.webContents.getTitle(), url: view.webContents.getURL(), ws: wsId, ...extra });
@@ -1325,11 +1878,11 @@ function addTabToSplit(url, wsId) {
       broadcastMediaState();
     }
   }
-  view.webContents.on('page-title-updated', (e, t) => { emit('tab-updated', { title: t, ws: wsId }); updatePlayingTabMeta(); saveUserTabsPersist(); });
+  view.webContents.on('page-title-updated', (e, t) => { emit('tab-updated', { title: t, ws: wsId }); updatePlayingTabMeta(); scheduleTabSave(); });
   view.webContents.on('page-favicon-updated', (e, favicons) => { if (favicons && favicons.length > 0) { const tab = tabs.find(t => t.id === id); if (tab) tab.favicon = favicons[0]; emit('tab-updated', { favicon: favicons[0], ws: wsId }); } });
   function resetFavicon() { const tab = tabs.find(t => t.id === id); if (tab) tab.favicon = ''; }
   view.webContents.on('did-navigate', (e, u) => { resetFavicon(); emit('tab-updated', { url: u, favicon: '', ws: wsId }); emitNav(); addHistory(u, view.webContents.getTitle(), wsId); saveUserTabsPersist(); if (u && u !== 'about:blank') { ensureSession(); recordVisitStart(id, u, view.webContents.getTitle(), wsId); } });
-  view.webContents.on('did-navigate-in-page', (e, u) => { if (e.isMainFrame) { resetFavicon(); emit('tab-updated', { url: u, favicon: '', ws: wsId }); emitNav(); addHistory(u, view.webContents.getTitle(), wsId); saveUserTabsPersist(); if (u && u !== 'about:blank') { ensureSession(); recordVisitStart(id, u, view.webContents.getTitle(), wsId); } } });
+  view.webContents.on('did-navigate-in-page', (e, u) => { if (e.isMainFrame) { resetFavicon(); emit('tab-updated', { url: u, favicon: '', ws: wsId }); emitNav(); addHistory(u, view.webContents.getTitle(), wsId); scheduleTabSave(); if (u && u !== 'about:blank') { ensureSession(); recordVisitStart(id, u, view.webContents.getTitle(), wsId); } } });
   view.webContents.on('did-start-loading', () => emit('tab-loading', { loading: true }));
   view.webContents.on('did-stop-loading', () => { emit('tab-loading', { loading: false }); emitNav(); });
   view.webContents.on('update-target-url', (e, u) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('status-url', u || ''); });
@@ -1377,6 +1930,7 @@ ipcMain.handle('cleanup-tabs', () => {
   });
   currentWorkspace = null;
   splitMode = false; splitLeft = null; splitRight = null;
+
   if (autoSaveInterval) { clearInterval(autoSaveInterval); autoSaveInterval = null; }
   Menu.setApplicationMenu(null);
   broadcastMediaState();
@@ -1419,6 +1973,19 @@ ipcMain.on('close-tab-workspace', (e, wsId, id) => {
   syncViews();
 });
 ipcMain.on('activate-tab', (e, id) => showTab(id));
+ipcMain.on('tab-context-menu', (e, id, wsId) => {
+  const tabs = wsId ? workspaceTabs[wsId] : currentTabs();
+  const t = tabs.find(x => x.id === id);
+  if (!t) return;
+  const isMuted = t.view.webContents.audioMuted;
+  const template = [
+    { label: isMuted ? 'Unmute Tab' : 'Mute Tab', click: () => t.view.webContents.audioMuted = !isMuted },
+    { label: 'Duplicate Tab', click: () => { if (wsId) { const prev = currentWorkspace; currentWorkspace = wsId; addTab(t.view.webContents.getURL()); currentWorkspace = prev; syncViews(); } else addTab(t.view.webContents.getURL()); } },
+    { type: 'separator' },
+    { label: 'Close Tab', click: () => closeTab(id) }
+  ];
+  Menu.buildFromTemplate(template).popup({ window: mainWindow });
+});
 ipcMain.on('activate-tab-workspace', (e, wsId, id) => {
   const prev = currentWorkspace;
   currentWorkspace = wsId;
@@ -1437,12 +2004,24 @@ ipcMain.on('stop-workspace', (e, wsId) => { const t = tabForWorkspace(wsId); if 
 ipcMain.on('resize-content', () => syncViews());
 ipcMain.on('panel-toggle', (e, open) => { panelOpen = open; syncViews(); });
 ipcMain.on('open-history', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('show-history'); });
-ipcMain.handle('get-tabs', () => currentTabs().map(t => ({ id: t.id, url: t.view.webContents.getURL(), title: t.view.webContents.getTitle() })));
+ipcMain.handle('get-tabs', () => {
+  const tabs = currentTabs().map(t => {
+    let u = ''; try { u = t.view.webContents.getURL(); } catch(e) { u = t.url || ''; }
+    let ti = ''; try { ti = t.view.webContents.getTitle(); } catch(e) { ti = t.title || ''; }
+    return { id: t.id, url: u || t.url || '', title: ti || t.title || '' };
+  });
+  return { tabs, activeId: getActiveId(currentWorkspace) };
+});
 
 ipcMain.handle('get-tabs-for-workspace', (e, wsId) => {
   const tabs = workspaceTabs[wsId];
-  if (!tabs) return [];
-  return tabs.map(t => ({ id: t.id, url: t.view.webContents.getURL(), title: t.view.webContents.getTitle() }));
+  if (!tabs) return { tabs: [], activeId: getActiveId(wsId) };
+  const list = tabs.map(t => {
+    let u = ''; try { u = t.view.webContents.getURL(); } catch(e) { u = t.url || ''; }
+    let ti = ''; try { ti = t.view.webContents.getTitle(); } catch(e) { ti = t.title || ''; }
+    return { id: t.id, url: u || t.url || '', title: ti || t.title || '' };
+  });
+  return { tabs: list, activeId: getActiveId(wsId) };
 });
 
 ipcMain.handle('get-media-state', () => {
@@ -1452,13 +2031,21 @@ ipcMain.handle('get-media-state', () => {
   return { playing: playingTabs.size > 0, tabs: entries, byWorkspace };
 });
 
+let suggestAbort = null;
 ipcMain.handle('fetch-suggestions', async (e, q) => {
   if (!q || !q.trim()) return [];
+  if (suggestAbort) suggestAbort.abort();
+  suggestAbort = new AbortController();
   try {
-    const res = await fetch('https://suggestqueries.google.com/complete/search?client=firefox&q=' + encodeURIComponent(q));
+    const res = await fetch('https://suggestqueries.google.com/complete/search?client=firefox&q=' + encodeURIComponent(q), { signal: suggestAbort.signal, cache: 'force-cache' });
     const data = await res.json();
     return data[1] || [];
   } catch(e) { return []; }
+});
+
+ipcMain.on('suggest-toggle', (e, { open, height }) => {
+  suggestHeight = open ? (height || 200) : 0;
+  syncViews();
 });
 
 // ── Zoom (global) ──
@@ -1485,7 +2072,68 @@ ipcMain.on('find-start', (e, text) => { const t = activeTab(); if (t && text) t.
 ipcMain.on('find-next', (e, text) => { const t = activeTab(); if (t && text) t.view.webContents.findInPage(text, { findNext: true }); });
 ipcMain.on('find-stop', () => { const t = activeTab(); if (t) t.view.webContents.stopFindInPage('clearSelection'); });
 
-// ── Fullscreen ──
+// ── Shortcuts & Quit Confirmation ──
+
+let quitConfirmWindow = null;
+
+function confirmQuit() {
+  if (quitConfirmWindow && !quitConfirmWindow.isDestroyed()) {
+    quitConfirmWindow.focus();
+    return;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    app.quit();
+    return;
+  }
+
+  quitConfirmWindow = new BrowserWindow({
+    width: 420,
+    height: 205,
+    parent: mainWindow,
+    modal: true,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    center: true,
+    show: false,
+    backgroundColor: '#00000000',
+    icon: findIcon() || undefined,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      spellcheck: false,
+    },
+  });
+
+  quitConfirmWindow.loadFile('confirm-quit.html');
+
+  quitConfirmWindow.once('ready-to-show', () => {
+    if (quitConfirmWindow && !quitConfirmWindow.isDestroyed()) {
+      quitConfirmWindow.show();
+      quitConfirmWindow.focus();
+    }
+  });
+
+  quitConfirmWindow.on('closed', () => {
+    quitConfirmWindow = null;
+  });
+}
+
+ipcMain.on('confirm-quit-action', (event, action) => {
+  if (action === 'quit') {
+    if (quitConfirmWindow && !quitConfirmWindow.isDestroyed()) {
+      quitConfirmWindow.close();
+    }
+    app.quit();
+  } else if (action === 'cancel') {
+    if (quitConfirmWindow && !quitConfirmWindow.isDestroyed()) {
+      quitConfirmWindow.close();
+    }
+  }
+});
 
 function setupF11Handler(wc) {
   wc.on('before-input-event', (event, input) => {
@@ -1493,9 +2141,13 @@ function setupF11Handler(wc) {
       event.preventDefault();
       mainWindow.setFullScreen(!mainWindow.isFullScreen());
     }
+    if ((input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) && input.type === 'keyDown') {
+      event.preventDefault();
+      wc.toggleDevTools();
+    }
     if (input.key === 'Escape' && input.type === 'keyDown') {
       event.preventDefault();
-      app.quit();
+      confirmQuit();
     }
   });
 }
@@ -1518,25 +2170,31 @@ ipcMain.on('reset-idle', () => { if (currentUser) resetIdleTimer(); });
 ipcMain.on('return-to-workspaces-req', () => { saveUserTabsPersist(); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('return-to-workspaces'); });
 ipcMain.on('return-to-login-req', () => { saveUserTabsPersist(); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('return-to-login'); });
 
-ipcMain.on('quit-app', () => app.quit());
+ipcMain.on('quit-app', () => confirmQuit());
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', async () => {
-  saveUserTabsPersist();
+function flushSessionsSync() {
+  try { saveUserTabsPersist(); } catch(e) {}
+  // Flush debounced save that may still be pending (<1.2s old navigation)
+  try { if (tabSaveDebounce) { clearTimeout(tabSaveDebounce); tabSaveDebounce = null; saveUserTabsPersist(); } } catch(e) {}
+  // Durability: checkpoint WAL so reopen sees everything even after crash/kill
+  try { if (db) db.pragma('wal_checkpoint(TRUNCATE)'); } catch(e) {}
+  try { endCurrentVisit(); } catch(e) {}
+  try { if (sessionStartTime) endSession(); } catch(e) {}
+  try { if (db) computeDailyMetrics(); } catch(e) {}
+  try { if (db) db.pragma('wal_checkpoint(TRUNCATE)'); } catch(e) {}
+}
+app.on('before-quit', () => {
   if (autoSaveInterval) { clearInterval(autoSaveInterval); autoSaveInterval = null; }
-  try {
-    await session.defaultSession.clearCache();
-    await session.defaultSession.clearStorageData();
-    if (currentWorkspace) {
-      try { const ws = session.fromPartition('persist:ws_' + currentWorkspace); await ws.clearCache(); await ws.clearStorageData(); } catch(e) {}
-    }
-  } catch(e) {}
+  flushSessionsSync();
 });
 
 // Single-instance lock
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) { app.quit(); } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (e, argv) => {
     if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
+    // A link clicked while AEGIS is already running opens in a new tab
+    handleExternalUrl(extractUrlFromArgv(argv));
   });
 }

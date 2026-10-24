@@ -8,12 +8,16 @@ contextBridge.exposeInMainWorld('ghost', {
   enterBrowser: () => ipcRenderer.send('enter-browser'),
   clearMenu: () => ipcRenderer.send('clear-menu'),
   openSettings: () => ipcRenderer.send('open-settings'),
+  openParameters: () => ipcRenderer.send('open-parameters'),
+  getAutoClose: () => ipcRenderer.invoke('get-auto-close'),
+  setAutoClose: (enabled, seconds) => ipcRenderer.invoke('set-auto-close', enabled, seconds),
   openHistory: () => ipcRenderer.send('open-history'),
   changePassword: (oldPw, newPw) => ipcRenderer.invoke('change-password', oldPw, newPw),
   uploadPhoto: (base64) => ipcRenderer.invoke('upload-photo', base64),
   verifyPassword: (pw) => ipcRenderer.invoke('verify-password', pw),
   getUser: () => ipcRenderer.invoke('get-user'),
   getHistory: (wsId) => ipcRenderer.invoke('get-history', wsId),
+  clearHistory: (wsId) => ipcRenderer.invoke('clear-history', wsId),
 
   // Workspaces
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),
@@ -31,6 +35,13 @@ contextBridge.exposeInMainWorld('ghost', {
   removeBookmark: (url) => ipcRenderer.invoke('remove-bookmark', url),
   isBookmarked: (url) => ipcRenderer.invoke('is-bookmarked', url),
 
+  // Notes
+  getNotes: () => ipcRenderer.invoke('get-notes'),
+  addNote: (content) => ipcRenderer.invoke('add-note', content),
+  updateNote: (id, content) => ipcRenderer.invoke('update-note', id, content),
+  deleteNote: (id) => ipcRenderer.invoke('delete-note', id),
+  onToggleNotes: (cb) => ipcRenderer.on('toggle-notes', () => cb()),
+
   // Browser
   navigate: (u) => ipcRenderer.send('navigate', u),
   navigateWorkspace: (wsId, u) => ipcRenderer.send('navigate-workspace', wsId, u),
@@ -41,6 +52,7 @@ contextBridge.exposeInMainWorld('ghost', {
   closeTabWorkspace: (wsId, id) => ipcRenderer.send('close-tab-workspace', wsId, id),
   activateTab: (id) => ipcRenderer.send('activate-tab', id),
   activateTabWorkspace: (wsId, id) => ipcRenderer.send('activate-tab-workspace', wsId, id),
+  tabContextMenu: (id, wsId) => ipcRenderer.send('tab-context-menu', id, wsId),
   goBack: () => ipcRenderer.send('go-back'),
   goBackWorkspace: (wsId) => ipcRenderer.send('go-back-workspace', wsId),
   goForward: () => ipcRenderer.send('go-forward'),
@@ -85,6 +97,12 @@ contextBridge.exposeInMainWorld('ghost', {
   // Home
   goHome: () => ipcRenderer.send('go-home'),
 
+  // Default browser & network speed
+  getDefaultBrowserStatus: () => ipcRenderer.invoke('get-default-browser-status'),
+  setDefaultBrowser: () => ipcRenderer.invoke('set-default-browser'),
+  getNetPrefs: () => ipcRenderer.invoke('get-net-prefs'),
+  setNetPrefs: (prefs) => ipcRenderer.invoke('set-net-prefs', prefs),
+
   // Idle
   resetIdleTimer: () => ipcRenderer.send('reset-idle'),
 
@@ -105,7 +123,6 @@ contextBridge.exposeInMainWorld('ghost', {
   onDownloadProgress: (cb) => ipcRenderer.on('download-progress', (e, d) => cb(d)),
   onToggleDownloads: (cb) => ipcRenderer.on('toggle-downloads', () => cb()),
   onDownloadsCleared: (cb) => ipcRenderer.on('downloads-cleared', () => cb()),
-  toggleDownloads: () => ipcRenderer.send('toggle-downloads'),
   openDownloadFolder: (savePath) => ipcRenderer.invoke('open-download-folder', savePath),
   openDownloadFile: (savePath) => ipcRenderer.invoke('open-download-file', savePath),
   deleteDownload: (savePath, dlId, deleteFile) => ipcRenderer.invoke('delete-download', savePath, dlId, deleteFile),
@@ -126,6 +143,7 @@ contextBridge.exposeInMainWorld('ghost', {
 
   // Suggestions
   fetchSuggestions: (q) => ipcRenderer.invoke('fetch-suggestions', q),
+  suggestToggle: (open, height) => ipcRenderer.send('suggest-toggle', { open, height }),
 
   // Navigation from toolbar menu
   returnToWorkspaces: () => ipcRenderer.send('return-to-workspaces-req'),
@@ -134,4 +152,5 @@ contextBridge.exposeInMainWorld('ghost', {
   // Emergency
   loginGuest: () => ipcRenderer.invoke('login-guest'),
   quitApp: () => ipcRenderer.send('quit-app'),
+  confirmQuitAction: (action) => ipcRenderer.send('confirm-quit-action', action),
 });
