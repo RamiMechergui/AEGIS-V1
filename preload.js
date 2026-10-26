@@ -37,8 +37,8 @@ contextBridge.exposeInMainWorld('ghost', {
   isBookmarked: (url) => ipcRenderer.invoke('is-bookmarked', url),
 
   // Notes
-  getNotes: () => ipcRenderer.invoke('get-notes'),
-  addNote: (content) => ipcRenderer.invoke('add-note', content),
+  getNotes: (wsId) => ipcRenderer.invoke('get-notes', wsId),
+  addNote: (content, wsId) => ipcRenderer.invoke('add-note', content, wsId),
   updateNote: (id, content) => ipcRenderer.invoke('update-note', id, content),
   deleteNote: (id) => ipcRenderer.invoke('delete-note', id),
   onToggleNotes: (cb) => ipcRenderer.on('toggle-notes', () => cb()),

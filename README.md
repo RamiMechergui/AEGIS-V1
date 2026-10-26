@@ -8,7 +8,7 @@ Privacy-focused desktop browser built with Electron. Zero tracking, zero cache p
 - **Workspaces** — each user gets isolated workspaces with their own tabs, restored automatically on login. Split-screen mode for two workspaces side by side.
 - **Tab session persistence** — tabs auto-save every 30 seconds and on quit, so a crash never costs you your session.
 - **Downloads manager** — per-workspace download list, progress events, open-in-folder, delete.
-- **Browsing history & bookmarks** — per-workspace history with visit durations, bookmarks, notes.
+- **Browsing history & bookmarks** — per-workspace history with visit durations, bookmarks, per-workspace notes.
 - **Activity dashboard** — daily / weekly / all-time analytics, opt-out toggle.
 - **Idle auto-close** — configurable timer that locks/closes the session after inactivity.
 - **Login self-destruct** *(new in v1.1)* — enter the wrong password **3 times in a row** and AEGIS erases every trace of local data: accounts, history, bookmarks, downloads, cookies/localStorage (workspace partitions) **and the whole Chromium profile** — site permission grants, Local State, DIPS bounce-tracking records, ad interest groups. The failed-attempt counter is stored on disk in the main process, so restarting the app cannot reset it; only a successful login does. Profile files Windows refuses to delete while Chromium still holds them are queued in `pending-wipe.json` and removed at the next launch, before anything is opened. The login screen keeps showing what happened — even after a restart — until a new account is created. Afterwards it is fully usable again with a fresh, empty database.
@@ -45,6 +45,7 @@ Otherwise it uses the standard per-user `%APPDATA%` location.
 - **Default Browser** — shows live status (green when AEGIS owns `http`/`https`), one-button registration, opens Windows Settings to confirm. *Windows 10/11 protect the default-browser choice, so the final "Set default" click happens in Windows Settings — AEGIS takes you straight there.*
 - **Network Speed** — **Secure DNS** toggle (DNS-over-HTTPS, default OFF, applied at next launch, persisted to `net-prefs.json` in the profile folder). Parallel downloading is always on.
 - **Browsing History** — password-gated history viewer.
+- **Take Notes** — password-gated like History: enter your password once per opening, then write, edit and delete notes. Notes are **workspace-isolated** — each workspace has its own independent list (existing notes from older versions are migrated to the default workspace), and the header shows which workspace's notes you are seeing.
 - **Idle auto-close** — enable/disable and set the timeout.
 
 ## Development
@@ -53,6 +54,7 @@ Otherwise it uses the standard per-user `%APPDATA%` location.
 - `preload.js` — `contextBridge` (exposed as `window.ghost`) — the only renderer→main surface.
 - `login.html`, `workspace.html`, `controls.html`, `dashboard.html`, `settings.html`, `parameters.html`, `confirm-quit.html` — renderer pages.
 - `audit.js` — static consistency check (JS/inline-script syntax, bridge-method coverage, IPC channel symmetry). Run with `node audit.js` before releasing.
+- `test-notes.js` — end-to-end test of the workspace-isolated, password-gated Notes (`node test-notes.js`). Same isolated-sandbox harness as `test-wipe.js`: it seeds a **legacy** `notes` table (no `workspace_id`) with an Electron-run helper to prove the migration backfills old notes to the default workspace, then asserts per-workspace scoping on the backend, the password gate in the real `controls.html` (including re-locking on reopen and Cancel closing the panel), that switching workspaces re-scopes the open list, and that deleting a workspace takes only its own notes.
 - `test-wipe.js` — E2E test for the login self-destruct (36 checks). Copies the app into a temp sandbox with portable mode, drives the real login page over CDP through 4 phases (counter survives a restart → wipe → leftovers erased on the next launch → app reusable), and proves the project `data\` folder is never touched. Run with `node test-wipe.js`.
 
 ## License

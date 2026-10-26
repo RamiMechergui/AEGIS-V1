@@ -534,7 +534,7 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
 
   <!-- Notes Panel (same side-bar pattern as History, independent section) -->
   <div class="panel" id="notes-panel">
-    <div class="phdr"><h3>Notes</h3><div style="display:flex;align-items:center;gap:6px"><span id="notes-count" style="font-size:7.5px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:var(--radius-pill);letter-spacing:0.5px;text-transform:uppercase"></span><button id="notes-close" title="Close (Esc)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div></div>
+    <div class="phdr"><h3>Notes</h3><div style="display:flex;align-items:center;gap:6px"><span id="notes-ws" style="font-size:7.5px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:var(--radius-pill);letter-spacing:0.5px;text-transform:uppercase;display:none;align-items:center"></span><span id="notes-count" style="font-size:7.5px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:var(--radius-pill);letter-spacing:0.5px;text-transform:uppercase"></span><button id="notes-close" title="Close (Esc)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div></div>
     <div class="notes-composer">
       <textarea id="note-input" placeholder="Write a note… — it is saved with today's date" spellcheck="false"></textarea>
       <div class="composer-row">
@@ -547,6 +547,19 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
       <div id="note-msg"></div>
     </div>
     <div id="notes-list"></div>
+    <!-- Password gate (same pattern as the History gate) -->
+    <div class="gate" id="notes-gate">
+      <div class="gb">
+        <h4>Password Required</h4>
+        <p>Enter your password to view your notes</p>
+        <input type="password" id="ngp" placeholder="Your password">
+        <div class="gm" id="ngm"></div>
+        <div class="mb" style="margin-top:4px">
+          <button id="ngc" class="ms">Cancel</button>
+          <button id="ngok" class="mp">Confirm</button>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -673,7 +686,7 @@ function closePanels() {
   closeNotes();
 }
 
-function histWsId() { return splitActive ? activeWs : null; }
+function sideBarWsId() { return splitActive ? activeWs : null; }
 
 function updateHistWsLabel() {
   let name;
@@ -691,7 +704,7 @@ function refreshHistForContext() {
   updateHistWsLabel();
   if (!gate.classList.contains('open')) {
     hl.innerHTML = '';
-    const histWs = histWsId();
+    const histWs = sideBarWsId();
     g.getHistory(histWs).then(items => renderH(items)).catch(() => {});
   }
 }
@@ -729,7 +742,7 @@ gok.onclick = async () => {
   if (ok) {
     hideGate(); hl.innerHTML = '';
     updateHistWsLabel();
-    const histWs = histWsId();
+    const histWs = sideBarWsId();
     const items = histWs ? await g.getHistory(histWs) : await g.getHistory();
     renderH(items);
   } else { gm.textContent = 'Incorrect password.'; }
@@ -1052,7 +1065,7 @@ ntr.onclick = () => { if (splitActive && splitRightId) g.newTabWorkspace(splitRi
 hb.onclick = toggleH;
 ch.onclick = () => { hp.classList.remove('open'); g.panelToggle(false); };
 hclear.onclick = async () => {
-  const histWs = histWsId();
+  const histWs = sideBarWsId();
   const res = await g.clearHistory(histWs);
   if (res && res.ok) { hl.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 3"/></svg></div><div class="bt">No history yet</div><div class="bs">Start browsing to see your history here</div></div>'; }
 };
@@ -1525,6 +1538,7 @@ g.onSplitChanged(async (d) => {
       refreshDl();
     }
     refreshHistForContext();
+    refreshNotesForContext();
   } else {
     splitBar.classList.remove('open');
     splLeft.classList.remove('focused');
@@ -1544,6 +1558,7 @@ g.onSplitChanged(async (d) => {
     refreshDl();
     render();
     refreshHistForContext();
+    refreshNotesForContext();
   }
 });
 
@@ -1584,6 +1599,7 @@ document.addEventListener('mouseup', () => {
 g.onWorkspaceSwitched((d) => {
   badgeLeft.textContent = d.name;
   refreshHistForContext();
+  refreshNotesForContext();
 });
 
 g.onReturnToLogin(async () => {
@@ -1660,14 +1676,25 @@ const notesBtn = document.getElementById('notes-btn');
 const notesPanel = document.getElementById('notes-panel');
 const notesList = document.getElementById('notes-list');
 const notesCount = document.getElementById('notes-count');
+const notesWsLbl = document.getElementById('notes-ws');
 const notesClose = document.getElementById('notes-close');
+const notesComposer = document.querySelector('#notes-panel .notes-composer');
 const noteInput = document.getElementById('note-input');
 const noteSave = document.getElementById('note-save');
 const noteCancel = document.getElementById('note-cancel');
 const noteMsg = document.getElementById('note-msg');
 const noteEditLbl = document.getElementById('note-edit-lbl');
+const notesGate = document.getElementById('notes-gate');
+const ngp = document.getElementById('ngp');
+const ngm = document.getElementById('ngm');
+const ngok = document.getElementById('ngok');
+const ngc = document.getElementById('ngc');
 let notesOpen = false;
+let notesUnlocked = false;
 let editingNoteId = null;
+
+// Shown while the password gate is up — never render note content before it.
+const NOTES_LOCKED_HTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><div class="bt">Password required</div><div class="bs">Enter your password to view this workspace\'s notes</div></div>';
 
 function resetComposer() {
   editingNoteId = null;
@@ -1678,22 +1705,71 @@ function resetComposer() {
   noteMsg.textContent = '';
 }
 
+function showNotesGate() { notesGate.classList.add('open'); ngp.value = ''; ngm.textContent = ''; setTimeout(() => { try { ngp.focus(); } catch(e) {} }, 60); }
+function hideNotesGate() { notesGate.classList.remove('open'); }
+
+function updateNotesWsLabel() {
+  let name;
+  if (splitActive && activeWs) {
+    name = activeWs === splitLeftId ? (splLeft.textContent || 'Left') : (splRight.textContent || 'Right');
+  } else {
+    name = badgeLeft.textContent || 'Current';
+  }
+  notesWsLbl.textContent = name + ' workspace';
+  notesWsLbl.style.display = 'flex';
+}
+
+// Notes list + header follow the focused workspace (same rule as History)
+function refreshNotesForContext() {
+  if (!notesOpen || !notesUnlocked) return;
+  updateNotesWsLabel();
+  loadNotes();
+}
+
+function unlockNotes() {
+  notesUnlocked = true;
+  hideNotesGate();
+  notesComposer.style.display = '';
+  updateNotesWsLabel();
+  loadNotes();
+  setTimeout(() => { try { noteInput.focus(); } catch(e) {} }, 60);
+}
+
+ngok.onclick = async () => {
+  const pw = ngp.value;
+  if (!pw) { ngm.textContent = 'Enter your password.'; return; }
+  const ok = await g.verifyPassword(pw);
+  if (ok) unlockNotes();
+  else { ngm.textContent = 'Incorrect password.'; ngp.value = ''; ngp.focus(); }
+};
+ngc.onclick = closeNotes;   // nothing to see while locked — close the side bar
+ngp.addEventListener('keydown', (e) => { if (e.key === 'Enter') ngok.click(); });
+
 function openNotes() {
   // Only one side bar at a time (same rule as History / Downloads / Settings)
   hp.classList.remove('open'); sp.classList.remove('open'); dlp.classList.remove('open');
   notesOpen = true;
+  notesUnlocked = false;
   notesBtn.classList.add('active');
   notesPanel.classList.add('open');
   g.panelToggle(true);
-  loadNotes();
-  setTimeout(() => { try { noteInput.focus(); } catch(e) {} }, 80);
+  resetComposer();
+  // Password gate first: neither the list nor the composer is reachable until passed
+  notesComposer.style.display = 'none';
+  notesWsLbl.style.display = 'none';
+  notesCount.textContent = '';
+  notesList.innerHTML = NOTES_LOCKED_HTML;
+  showNotesGate();
 }
 
 function closeNotes() {
   if (!notesOpen) return;
   notesOpen = false;
+  notesUnlocked = false;
   notesBtn.classList.remove('active');
   notesPanel.classList.remove('open');
+  hideNotesGate();
+  notesComposer.style.display = '';
   resetComposer();
   g.panelToggle(false);
 }
@@ -1705,9 +1781,10 @@ notesClose.onclick = closeNotes;
 if (g.onToggleNotes) g.onToggleNotes(() => toggleNotes());
 
 async function loadNotes() {
-  if (!notesOpen) return;
+  if (!notesOpen || !notesUnlocked) return;
   let notes = [];
-  try { notes = await g.getNotes(); } catch(e) {}
+  try { notes = await g.getNotes(sideBarWsId()); } catch(e) {}
+  if (!notesOpen || !notesUnlocked) return;   // gate came back up while awaiting
   renderNotes(notes);
 }
 
@@ -1724,7 +1801,8 @@ function renderNotes(notes) {
   const list = (notes || []).slice().sort((a, b) => ((b.created || 0) - (a.created || 0)) || ((b.id || 0) - (a.id || 0)));
   notesCount.textContent = list.length ? list.length + (list.length === 1 ? ' note' : ' notes') : '';
   if (!list.length) {
-    notesList.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/><path d="M8.5 13h7M8.5 16.5h4.5"/></svg></div><div class="bt">No notes yet</div><div class="bs">Notes are ordered by date — newest on top</div></div>';
+    const wsName = (notesWsLbl.textContent || '').replace(/\s*workspace$/i, '') || 'this workspace';
+    notesList.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/><path d="M8.5 13h7M8.5 16.5h4.5"/></svg></div><div class="bt">No notes in ' + esc(wsName) + '</div><div class="bs">Each workspace keeps its own notes — newest on top</div></div>';
     return;
   }
   const groups = [];
@@ -1779,7 +1857,7 @@ noteSave.onclick = async () => {
   noteMsg.textContent = '';
   let res;
   try {
-    res = editingNoteId ? await g.updateNote(editingNoteId, text) : await g.addNote(text);
+    res = editingNoteId ? await g.updateNote(editingNoteId, text) : await g.addNote(text, sideBarWsId());
   } catch(err) { noteMsg.textContent = 'Could not save the note.'; return; }
   if (!res || res.ok === false) { noteMsg.textContent = (res && res.error) || 'Could not save the note.'; return; }
   resetComposer();

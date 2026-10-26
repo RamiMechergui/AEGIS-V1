@@ -318,6 +318,7 @@ function initDB() {
     );
     CREATE TABLE IF NOT EXISTS notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_pseudo TEXT NOT NULL,
+      workspace_id TEXT NOT NULL DEFAULT 'default',
       content TEXT NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL
     );
   `);
@@ -340,6 +341,10 @@ function initDB() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks(user_pseudo, workspace_id, url)'); } catch(e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON browser_sessions(user_pseudo, start_time)'); } catch(e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_notes_user_created ON notes(user_pseudo, created)'); } catch(e) {}
+  // ── Notes are per-workspace; older builds stored them per user only ──
+  try { db.exec("ALTER TABLE notes ADD COLUMN workspace_id TEXT NOT NULL DEFAULT 'default'"); } catch(e) {}
+  try { db.exec("UPDATE notes SET workspace_id = 'default' WHERE workspace_id IS NULL OR workspace_id = ''"); } catch(e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_notes_user_ws_created ON notes(user_pseudo, workspace_id, created)'); } catch(e) {}
   // Assign distinct colors to existing workspaces that have the default
   const wsColors = ['#4a8bc5','#7a5db5','#48bb78','#e5834a','#e56a6a','#4ac5b5','#c5a84a','#9b5de5'];
   try {
@@ -393,8 +398,8 @@ function prepareStatements() {
   stmt.bookmarkCheck = db.prepare('SELECT id FROM bookmarks WHERE user_pseudo=? AND workspace_id=? AND url=?');
   stmt.bookmarkInsert = db.prepare('INSERT INTO bookmarks (user_pseudo,workspace_id,url,title,timestamp) VALUES (?,?,?,?,?)');
   stmt.bookmarkDelete = db.prepare('DELETE FROM bookmarks WHERE user_pseudo=? AND workspace_id=? AND url=?');
-  stmt.noteList = db.prepare('SELECT id,content,created,updated FROM notes WHERE user_pseudo=? ORDER BY created DESC, id DESC');
-  stmt.noteInsert = db.prepare('INSERT INTO notes (user_pseudo,content,created,updated) VALUES (?,?,?,?)');
+  stmt.noteList = db.prepare('SELECT id,content,created,updated FROM notes WHERE user_pseudo=? AND workspace_id=? ORDER BY created DESC, id DESC');
+  stmt.noteInsert = db.prepare('INSERT INTO notes (user_pseudo,workspace_id,content,created,updated) VALUES (?,?,?,?,?)');
   stmt.noteUpdate = db.prepare('UPDATE notes SET content=?,updated=? WHERE id=? AND user_pseudo=?');
   stmt.noteDelete = db.prepare('DELETE FROM notes WHERE id=? AND user_pseudo=?');
 }
@@ -1888,22 +1893,29 @@ ipcMain.handle('is-bookmarked', (e, url) => {
 });
 
 // ── Notes ──
+// Every note belongs to a workspace: the side bar shows one workspace's notes
+// at a time, exactly like History/Downloads.
 
 function notesReady() { return !!currentUser && !!db && !!stmt.noteList; }
+function notesWsId(wsId) { return wsId || currentWorkspace; }
 
-ipcMain.handle('get-notes', () => {
+ipcMain.handle('get-notes', (e, wsId) => {
   if (!notesReady()) return [];
-  try { return stmt.noteList.all(currentUser); } catch(e) { return []; }
+  const ws = notesWsId(wsId);
+  if (!ws) return [];
+  try { return stmt.noteList.all(currentUser, ws); } catch(e) { return []; }
 });
 
-ipcMain.handle('add-note', (e, content) => {
+ipcMain.handle('add-note', (e, content, wsId) => {
   const text = (content || '').trim();
   if (!notesReady()) return { ok: false, error: 'Not logged in.' };
   if (!text) return { ok: false, error: 'Note is empty.' };
+  const ws = notesWsId(wsId);
+  if (!ws) return { ok: false, error: 'No active workspace.' };
   const now = Date.now();
   try {
-    const info = stmt.noteInsert.run(currentUser, text, now, now);
-    return { ok: true, note: { id: info.lastInsertRowid, content: text, created: now, updated: now } };
+    const info = stmt.noteInsert.run(currentUser, ws, text, now, now);
+    return { ok: true, note: { id: info.lastInsertRowid, workspaceId: ws, content: text, created: now, updated: now } };
   } catch(err) { return { ok: false, error: 'Could not save the note.' }; }
 });
 
@@ -1979,6 +1991,7 @@ ipcMain.handle('delete-workspace', (e, id) => {
     db.prepare('DELETE FROM tabs WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
     db.prepare('DELETE FROM history WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
     db.prepare('DELETE FROM bookmarks WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
+    db.prepare('DELETE FROM notes WHERE user_pseudo=? AND workspace_id=?').run(currentUser, id);
     db.prepare('DELETE FROM workspaces WHERE id=? AND user_pseudo=?').run(id, currentUser);
   })();
   invalidateBookmarkCache();
