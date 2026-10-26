@@ -103,6 +103,7 @@ input::placeholder{color:var(--text3)}
 
 /* ── Messages ── */
 .error{color:var(--red);font-size:10.5px;margin-top:8px;min-height:16px;line-height:1.4;transition:all .2s}
+.error.fatal{font-size:11.5px;font-weight:600;line-height:1.5}
 .success{color:var(--green);font-size:10.5px;margin-top:8px}
 .toggle-link{color:var(--blue);font-size:11px;cursor:pointer;margin-top:16px;display:inline-block;transition:color .15s;font-weight:500}
 .toggle-link:hover{color:var(--blue-hover)}
@@ -214,10 +215,18 @@ document.getElementById('login-btn').onclick = async () => {
   const p = document.getElementById('login-pseudo').value.trim();
   const pw = document.getElementById('login-pass').value;
   const err = document.getElementById('login-error');
-  err.textContent = '';
+  err.textContent = ''; err.classList.remove('fatal');
   if (!p || !pw) { err.textContent = 'Please enter username and password.'; return; }
   const r = await g.login(p, pw);
   if (r.ok) { window.location.href = 'workspace.html'; }
+  else if (r.wiped) {
+    // Self-destruct fired: 3 wrong passwords erased every local account and trace of data.
+    err.textContent = r.error || 'Too many failed attempts. All data has been deleted. Please create a new account.';
+    err.classList.add('fatal');
+    document.getElementById('login-pass').value = '';
+    document.getElementById('login-pseudo').value = '';
+    document.getElementById('login-pseudo').focus();
+  }
   else { err.textContent = r.error || 'Invalid credentials.'; }
 };
 

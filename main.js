@@ -1540,10 +1540,115 @@ ipcMain.handle('register', (e, pseudo, password) => {
   return { ok: true };
 });
 
-ipcMain.handle('login', (e, pseudo, password) => {
+// ── Login security: 3 wrong passwords wipe every trace of local data ──
+// The counter lives in the main process (and on disk), so neither the
+// renderer nor an app restart can reset it. Only a successful login clears it.
+const LOGIN_ATTEMPTS_PATH = path.join(app.getPath('userData'), 'login-attempts.json');
+const MAX_LOGIN_ATTEMPTS = 3;
+
+function readLoginAttempts() {
+  try {
+    const n = JSON.parse(fs.readFileSync(LOGIN_ATTEMPTS_PATH, 'utf8'));
+    return (typeof n.count === 'number' && n.count >= 0) ? n.count : 0;
+  } catch (e) { return 0; }
+}
+function writeLoginAttempts(count) {
+  // Write-then-rename so an interrupted write can never leave truncated JSON
+  // behind — readLoginAttempts() treats unreadable JSON as 0, which would
+  // silently reset the counter and undo the protection.
+  const tmp = LOGIN_ATTEMPTS_PATH + '.tmp';
+  try {
+    fs.writeFileSync(tmp, JSON.stringify({ count: count, updated: Date.now() }));
+    fs.renameSync(tmp, LOGIN_ATTEMPTS_PATH);
+  } catch (e) {
+    try { fs.writeFileSync(LOGIN_ATTEMPTS_PATH, JSON.stringify({ count: count, updated: Date.now() })); } catch (e2) {}
+    try { fs.unlinkSync(tmp); } catch (e3) {}
+  }
+}
+function clearLoginAttempts() { try { fs.unlinkSync(LOGIN_ATTEMPTS_PATH); } catch (e) {} }
+
+function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch (e) {} }
+
+// DESTRUCTIVE. Erases accounts, history, bookmarks, downloads, cookies,
+// localStorage, workspace partitions and profile storage, then rebuilds an
+// empty database so the login screen is usable again.
+async function wipeAllData() {
+  // 1. Close any open tab views (normally none — login runs from the login screen)
+  try {
+    Object.keys(workspaceTabs).forEach(wsId => {
+      workspaceTabs[wsId].forEach(t => {
+        try { mainWindow.contentView.removeChildView(t.view); } catch (e) {}
+        try { t.view.webContents.close(); } catch (e) {}
+      });
+    });
+  } catch (e) {}
+  workspaceTabs = {}; activeIdPerWorkspace = {}; idCounter = 0;
+  playingTabs.clear();
+  currentUser = null; currentWorkspace = null;
+  if (autoSaveInterval) { clearInterval(autoSaveInterval); autoSaveInterval = null; }
+  if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
+  invalidateBookmarkCache();
+
+  // 2. Database + WAL/SHM/journal sidecars
+  if (db) { try { db.close(); } catch (e) {} db = null; }
+  [DB_PATH, DB_PATH + '-wal', DB_PATH + '-shm', DB_PATH + '-journal'].forEach(f => rmrf(f));
+
+  // 3. Legacy JSON store + backup, network prefs, and the attempt counter itself
+  const userDataDir = app.getPath('userData');
+  ['ghostview-data.json', 'ghostview-data.json.bak', 'net-prefs.json',
+   'login-attempts.json', 'login-attempts.json.tmp']
+    .forEach(f => rmrf(path.join(userDataDir, f)));
+
+  // 4. Default session (login window): cache, storage, HTTP auth
+  try { await session.defaultSession.clearCache(); } catch (e) {}
+  try { await session.defaultSession.clearStorageData(); } catch (e) {}
+  try { await session.defaultSession.clearAuthCache(); } catch (e) {}
+
+  // 5. Per-workspace partition data (cookies, localStorage, IndexedDB)
+  const sessionDataDir = app.getPath('sessionData');
+  rmrf(path.join(sessionDataDir, 'Partitions'));
+
+  // 6. Default-session profile storage on disk (best effort — Chromium may hold handles)
+  ['Cookies', 'Local Storage', 'Session Storage', 'Network', 'IndexedDB', 'WebStorage',
+   'blob_storage', 'Service Worker', 'File System', 'GPUCache', 'Cache', 'Code Cache']
+    .forEach(d => rmrf(path.join(sessionDataDir, d)));
+
+  // 7. Fresh, empty database so login/registration still work
+  initDB();
+  prepareStatements();
+  invalidateBookmarkCache();
+}
+
+ipcMain.handle('login', async (e, pseudo, password) => {
+  console.log('[dbg] login call, attemptsOnDisk=' + readLoginAttempts());
   if (!pseudo || !password) return { ok: false, error: 'Enter pseudonym and password.' };
-  if (!loginUser(pseudo, password)) return { ok: false, error: 'Invalid credentials.' };
-  return { ok: true };
+  if (loginUser(pseudo, password)) {
+    clearLoginAttempts();
+    return { ok: true };
+  }
+
+  // Failed attempt — 3 strikes and all local data is erased.
+  const attempts = readLoginAttempts() + 1;
+  if (attempts >= MAX_LOGIN_ATTEMPTS) {
+    console.log('[dbg] WIPE firing, attempts=' + attempts);
+    writeLoginAttempts(attempts);          // persisted first: survives even if the wipe fails
+    try { await wipeAllData(); } catch (err) {
+      console.error('wipeAllData failed:', err);
+      // Best-effort recovery so the login screen still accepts a fresh registration
+      try { if (!db) { initDB(); prepareStatements(); } } catch (e2) { console.error('re-init failed:', e2); }
+    }
+    console.log('[dbg] wipe done');
+    clearLoginAttempts();
+    return { ok: false, wiped: true, error: 'Too many failed attempts. All data has been deleted. Please create a new account.' };
+  }
+
+  writeLoginAttempts(attempts);
+  const left = MAX_LOGIN_ATTEMPTS - attempts;
+  return {
+    ok: false,
+    attemptsLeft: left,
+    error: 'Invalid credentials. ' + left + (left === 1 ? ' attempt left' : ' attempts left') + ' before all data is erased.'
+  };
 });
 
 ipcMain.handle('logout', () => {
