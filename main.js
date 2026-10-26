@@ -702,7 +702,19 @@ function setupSession(ses, wsId) {
   if (ses._configured) return;
   ses._configured = true;
   ses.webRequest.onBeforeRequest({ urls: blockList }, (details, callback) => callback({ cancel: true }));
+  // Check-level gate: geolocation is always refused, so navigator.permissions
+  // reports it as 'denied' and no code path can opt into the OS location
+  // service. Every other permission is returned exactly as Electron's own
+  // default would (granted, except deprecated-sync-clipboard-read), so this
+  // handler changes nothing but geolocation.
+  ses.setPermissionCheckHandler((wc, perm) => {
+    if (perm === 'geolocation') return false;
+    return perm !== 'deprecated-sync-clipboard-read';
+  });
   ses.setPermissionRequestHandler((wc, perm, cb) => {
+    // Geolocation is auto-refused before the cache and before the dialog:
+    // a previously allowed site cannot re-enable it and no popup is ever shown.
+    if (perm === 'geolocation') return cb(false);
     const key = wsId + ':' + new URL(wc.getURL() || 'http://localhost').hostname + ':' + perm;
     if (permCache[key] !== undefined) return cb(permCache[key]);
     if (!mainWindow || mainWindow.isDestroyed()) return cb(false);
@@ -1617,7 +1629,13 @@ function flushPendingExternalUrls() {
 const startupExternalUrl = extractUrlFromArgv(process.argv);
 if (startupExternalUrl) pendingExternalUrls.push(startupExternalUrl);
 
-app.whenReady().then(() => { initDB(); prepareStatements(); createWindow(); });
+app.whenReady().then(() => {
+  // Cover the default session too: tabs opened without a workspace partition
+  // (login, landing, restored URLs) run here, and an unconfigured session would
+  // silently allow geolocation without ever consulting a handler.
+  setupSession(session.defaultSession, null);
+  initDB(); prepareStatements(); createWindow();
+});
 
 // ── Auth IPC ──
 
