@@ -10,7 +10,9 @@
 // Flow:
 //   Phase A  register an account, fail 2 logins  -> counter must be 2 on disk
 //   (restart the app)                             -> proves an app restart cannot reset the counter
-//   Phase B  fail the 3rd login                   -> wipe fires, all data gone
+//   Phase B  fail the 3rd login                   -> wipe fires, every profile file gone,
+//                                                    markers queued, message on screen
+//   Phase B2 leftovers flushed back by Chromium   -> the next launch finishes the wipe
 //   Phase C  register + log in with a new account -> app still fully usable
 
 const fs = require('fs');
@@ -87,11 +89,41 @@ function setupSandbox() {
 
   // Seed data that the wipe must remove
   const dataDir = path.join(SANDBOX, 'data');
-  fs.mkdirSync(path.join(dataDir, 'session', 'Partitions', 'user_rami_ws_default'), { recursive: true });
-  fs.writeFileSync(path.join(dataDir, 'session', 'Partitions', 'user_rami_ws_default', 'Cookies'), 'seed');
+  fs.mkdirSync(dataDir, { recursive: true });
   fs.writeFileSync(path.join(dataDir, 'ghostview-data.json'), '{"legacy":true}');
   fs.writeFileSync(path.join(dataDir, 'ghostview-data.json.bak'), '{"legacy":true}');
   fs.writeFileSync(path.join(dataDir, 'net-prefs.json'), '{"secureDns":true}');
+  seedProfileFiles();
+}
+
+// A realistic Electron 35 / Chromium profile. These are exactly the items a
+// hand-maintained wipe allowlist used to miss: site permission grants (the
+// Preferences file), Local State, the DIPS bounce-tracking record (a list of
+// sites the user visited), ad InterestGroups, SharedStorage and the per-
+// workspace cookie jars.
+const SEEDS = {
+  'Preferences': 'SEEDPREFS-GRANTS',
+  'Local State': 'SEEDLOCALSTATE',
+  'DIPS': 'SEEDDIPS-RECORD',
+  'DIPS-wal': 'SEEDDIPSWAL',
+  'InterestGroups': 'SEEDINTERESTGROUPS',
+  'SharedStorage': 'SEEDSHAREDSTORAGE',
+  'PrivateAggregation': 'SEEDAGGREGATION',
+  'Network/Cookies': 'SEEDNETWORKCOOKIES',
+  'Local Storage/leveldb/000003.log': 'SEEDLOCALSTORAGE',
+  'Partitions/user_rami_ws_default/Cookies': 'SEEDWORKSPACECOOKIES',
+};
+function seedProfileFiles() {
+  for (const [rel, content] of Object.entries(SEEDS)) {
+    const p = path.join(SANDBOX, 'data', 'session', rel);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, content);
+  }
+}
+function seedFile(rel, content) {
+  const p = path.join(SANDBOX, 'data', rel);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, content);
 }
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
@@ -99,7 +131,8 @@ let child = null;
 let stderrBuf = '';
 let stdoutBuf = '';
 function launch() {
-  stderrBuf = ''; stdoutBuf = '';
+  // Buffers are NOT reset per launch: the log of the run that performed the
+  // wipe is the one worth printing if something fails three phases later.
   activePort = nextPort++;
   child = spawn(ELECTRON, ['.', '--remote-debugging-port=' + activePort], { cwd: SANDBOX, stdio: ['ignore', 'pipe', 'pipe'] });
   console.log('  (launched pid ' + child.pid + ' on port ' + activePort + ')');
@@ -236,6 +269,8 @@ async function readyApp() {
 const D = () => path.join(SANDBOX, 'data');
 const dbFile = () => path.join(D(), 'ghostview.db');
 const attemptsFile = () => path.join(D(), 'login-attempts.json');
+const pendingFile = () => path.join(D(), 'pending-wipe.json');
+const noticeFile = () => path.join(D(), 'wipe-notice.json');
 // Reads the main DB file AND its WAL sidecar: in WAL mode recent rows may still
 // live in ghostview.db-wal until a checkpoint, so a byte search must cover both.
 const dbHas = (needle) => {
@@ -244,6 +279,29 @@ const dbHas = (needle) => {
   }
   return false;
 };
+// Byte search across the whole sandbox data folder — DB, WAL, JSON stores and
+// the Chromium profile alike — returning every file that still holds `needle`.
+function dataHas(needle) {
+  const hits = [];
+  const walk = (dir) => {
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    for (const e of ents) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(p); continue; }
+      try { if (fs.statSync(p).size > 8 * 1024 * 1024) continue; } catch (err) { continue; }
+      try { if (fs.readFileSync(p).includes(needle)) hits.push(path.relative(D(), p)); } catch (err) {}
+    }
+  };
+  walk(D());
+  return hits;
+}
+// Profiles still holding any of the seeded secrets.
+function leftoverSeeds() {
+  const left = [];
+  for (const [rel, content] of Object.entries(SEEDS)) if (dataHas(content).length) left.push(rel);
+  return left;
+}
 
 // Diagnostic snapshot of the sandbox's persistent state.
 function dumpState(label) {
@@ -256,6 +314,8 @@ function dumpState(label) {
     parts.push(f + '=' + fs.existsSync(path.join(D(), f)));
   }
   parts.push('Partitions=' + fs.existsSync(path.join(D(), 'session', 'Partitions')));
+  parts.push('pendingWipe=' + fs.existsSync(pendingFile()));
+  parts.push('wipeNotice=' + fs.existsSync(noticeFile()));
   console.log('  [state @ ' + label + '] ' + parts.join('  '));
 }
 
@@ -274,6 +334,7 @@ function dumpState(label) {
   console.log('  sandbox prepared (portable mode)\n');
 
   let page = null;
+  let appLog = ['', ''];
   try {
     // ── Phase A ──────────────────────────────────────────────────────────────
     console.log('-- Phase A: register + 2 failed logins --');
@@ -281,6 +342,9 @@ function dumpState(label) {
 
     let r = await page.ev('!!window.ghost');
     check('login page exposes the ghost bridge', r === true, r);
+
+    r = await page.ev('window.ghost.wipeNotice()');
+    check('no wipe notice on a clean profile', r && r.wiped === false, JSON.stringify(r));
 
     r = await page.ev("window.ghost.register('tester','correct-horse')");
     check('register creates the account', r && r.ok === true, JSON.stringify(r));
@@ -307,9 +371,26 @@ function dumpState(label) {
     page = await readyApp();
     dumpState('phase B started, before login');
 
-    r = await page.ev("window.ghost.login('tester','wrong-3')");
-    check('wrong password #3 -> wipe flagged', r && r.wiped === true, JSON.stringify(r));
+    // The 3rd failure goes through the real user path — the Sign In button —
+    // so this proves the whole chain: main answers wiped:true and login.html
+    // renders it (that message branch only exists for wiped responses).
+    let msg = await page.ev(`(async () => {
+      document.getElementById('login-pseudo').value = 'tester';
+      document.getElementById('login-pass').value = 'wrong-3';
+      document.getElementById('login-btn').click();
+      for (let i = 0; i < 80; i++) {
+        const t = (document.getElementById('login-error') || {}).textContent || '';
+        if (/deleted/i.test(t)) return t;
+        await new Promise(r => setTimeout(r, 250));
+      }
+      return (document.getElementById('login-error') || {}).textContent || '';
+    })()`);
+    check('3rd wrong password -> wipe message rendered on the login screen',
+      /deleted/i.test(msg || ''), JSON.stringify(msg));
     dumpState('after the 3rd failed login');
+
+    r = await page.ev('window.ghost.wipeNotice()');
+    check('wipe-notice IPC reports the wipe', r && r.wiped === true, JSON.stringify(r));
 
     check('accounts DB still exists (recreated)', fs.existsSync(dbFile()));
     check('account data erased from DB', !dbHas('tester'));
@@ -322,9 +403,62 @@ function dumpState(label) {
     check('seeded partition payload is gone',
       !fs.existsSync(path.join(D(), 'session', 'Partitions', 'user_rami_ws_default', 'Cookies')));
 
+    // The whole Chromium profile must go, not only the names an allowlist
+    // happened to contain: Preferences (site grants), Local State, DIPS (a log
+    // of visited sites), InterestGroups, SharedStorage, workspace cookies…
+    // Chromium keeps a couple of browser-owned DBs (SharedStorage) open for the
+    // whole session and refuses to unlink them — those are covered by the
+    // pending-wipe marker and asserted again after the restart in Phase B2.
+    const heldLive = leftoverSeeds();
+    check('profile seeds erased live, or queued behind Chromium locks for the next launch',
+      heldLive.length === 0 || fs.existsSync(pendingFile()),
+      heldLive.length ? 'still held by Chromium: ' + heldLive.join(', ') : '');
+    if (heldLive.length) console.log('  (held until next launch: ' + heldLive.join(', ') + ')');
+
+    check('pending-wipe marker left for the next launch', fs.existsSync(pendingFile()));
+    check('wipe notice written for the login screen', fs.existsSync(noticeFile()));
+
     // The old account must be truly gone: the CORRECT password no longer works.
     r = await page.ev("window.ghost.login('tester','correct-horse')");
     check('old account unusable after wipe (correct password rejected)', r && r.ok === false, JSON.stringify(r));
+
+    // ── Phase B2 ─────────────────────────────────────────────────────────────
+    // Chromium flushes Preferences/Local State back to disk when it exits, and
+    // may have refused to unlink files it held. Simulate both, then prove the
+    // NEXT launch finishes the wipe before any profile file is opened.
+    console.log('\n-- Phase B2: leftovers flushed on shutdown are erased at the next launch --');
+    await killApp(page);
+    dumpState('after the wipe, app killed');
+    const FLUSHED = {
+      'session/Preferences': 'FLUSHEDPREFS-SECRET',
+      'session/Local State': 'FLUSHEDLOCALSTATE-SECRET',
+      'session/Partitions/user_rami_ws_default/Cookies': 'FLUSHEDCOOKIES-SECRET',
+    };
+    for (const rel of Object.keys(FLUSHED)) seedFile(rel, FLUSHED[rel]);
+    check('shutdown leftovers planted on disk', dataHas('FLUSHEDPREFS-SECRET').length === 1,
+      JSON.stringify(dataHas('FLUSHEDPREFS-SECRET')));
+    check('pending-wipe marker still queued', fs.existsSync(pendingFile()));
+
+    page = await readyApp();
+    check('next launch consumed the pending-wipe marker', !fs.existsSync(pendingFile()));
+    const stillLeft = Object.keys(FLUSHED).filter(rel => dataHas(FLUSHED[rel]).length);
+    check('shutdown leftovers erased before Chromium reopened them',
+      stillLeft.length === 0, stillLeft.join(', '));
+    const heldAfterRestart = leftoverSeeds();
+    check('every profile seed gone after the restart, including Chromium-locked files',
+      heldAfterRestart.length === 0, heldAfterRestart.join(', '));
+    check('wipe notice survives the restart', fs.existsSync(noticeFile()));
+    await sleep(600);
+    msg = await page.ev("(document.getElementById('login-error')||{}).textContent || ''");
+    check('restarted login screen still reports the wipe', /deleted/i.test(msg || ''), msg);
+
+    // Typing dismisses the notice, so the user is not stuck with it forever.
+    msg = await page.ev(`(() => {
+      const i = document.getElementById('login-pseudo');
+      i.value = 'tester'; i.dispatchEvent(new Event('input'));
+      return document.getElementById('login-error').textContent;
+    })()`);
+    check('typing dismisses the wipe message', !/deleted/i.test(msg || ''), JSON.stringify(msg));
 
     // ── Phase C ──────────────────────────────────────────────────────────────
     console.log('\n-- Phase C: app still usable afterwards --');
@@ -334,16 +468,14 @@ function dumpState(label) {
     r = await page.ev("window.ghost.login('tester','brand-new-pass')");
     check('new account can log in', r && r.ok === true, JSON.stringify(r));
     check('successful login resets the counter', !fs.existsSync(attemptsFile()));
+    check('successful registration/login acknowledges the wipe notice', !fs.existsSync(noticeFile()));
   } catch (e) {
     failures++;
     console.log('  [FAIL] test aborted: ' + e.message);
-    if (stderrBuf && stderrBuf.trim()) console.log('  --- app stderr ---\n' + stderrBuf.trim());
-    if (stdoutBuf && stdoutBuf.trim()) console.log('  --- app stdout ---\n' + stdoutBuf.trim());
   } finally {
     await killApp(page);
     if (page) page.close();
-    if (stdoutBuf && stdoutBuf.trim()) console.log('  --- app stdout ---\n' + stdoutBuf.trim());
-    if (stderrBuf && stderrBuf.trim()) console.log('  --- app stderr ---\n' + stderrBuf.trim());
+    appLog = [stdoutBuf, stderrBuf];
   }
 
   // ── Safety proof: the real project data folder must be untouched ───────────
@@ -355,6 +487,11 @@ function dumpState(label) {
   check('project node_modules untouched by the test',
     fs.existsSync(path.join(SRC, 'node_modules', 'electron', 'dist', 'electron.exe')) &&
     fs.existsSync(path.join(SRC, 'node_modules', 'better-sqlite3', 'build', 'Release', 'better_sqlite3.node')));
+
+  if (failures !== 0) {
+    if (appLog[0] && appLog[0].trim()) console.log('  --- app stdout ---\n' + appLog[0].trim());
+    if (appLog[1] && appLog[1].trim()) console.log('  --- app stderr ---\n' + appLog[1].trim());
+  }
 
   if (failures === 0) {
     dropJunction();                                   // unlink first — never let rmSync follow it

@@ -199,6 +199,23 @@ const g = window.ghost;
 const loginForm = document.getElementById('login-form');
 const regForm = document.getElementById('register-form');
 
+// If a wipe already happened — even in an earlier run, even if this window
+// crashed before the answer arrived — say so up front instead of letting the
+// user assume their password is wrong on an empty profile.
+g.wipeNotice().then(r => {
+  if (r && r.wiped) {
+    const err = document.getElementById('login-error');
+    err.textContent = r.msg || 'Too many failed attempts. All local data has been deleted. Please create a new account.';
+    err.classList.add('fatal');
+  }
+}).catch(() => {});
+
+// Typing means the user has read it.
+['login-pseudo', 'login-pass'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+  const err = document.getElementById('login-error');
+  if (err.classList.contains('fatal')) { err.textContent = ''; err.classList.remove('fatal'); }
+}));
+
 document.getElementById('show-register').onclick = () => {
   loginForm.classList.add('hidden'); regForm.classList.remove('hidden');
   regForm.className = 'form-wrap'; // retrigger animation

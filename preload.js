@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('ghost', {
   // Auth
   register: (p, pw) => ipcRenderer.invoke('register', p, pw),
   login: (p, pw) => ipcRenderer.invoke('login', p, pw),
+  wipeNotice: () => ipcRenderer.invoke('wipe-notice'),
   logout: () => ipcRenderer.invoke('logout'),
   enterBrowser: () => ipcRenderer.send('enter-browser'),
   clearMenu: () => ipcRenderer.send('clear-menu'),

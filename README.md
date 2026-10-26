@@ -11,7 +11,7 @@ Privacy-focused desktop browser built with Electron. Zero tracking, zero cache p
 - **Browsing history & bookmarks** — per-workspace history with visit durations, bookmarks, notes.
 - **Activity dashboard** — daily / weekly / all-time analytics, opt-out toggle.
 - **Idle auto-close** — configurable timer that locks/closes the session after inactivity.
-- **Login self-destruct** *(new in v1.1)* — enter the wrong password **3 times in a row** and AEGIS erases every trace of local data: accounts, history, bookmarks, downloads, cookies/localStorage (workspace partitions) and profile storage. The failed-attempt counter is stored on disk in the main process, so restarting the app cannot reset it; only a successful login does. Afterwards the login screen is fully usable again with a fresh, empty database.
+- **Login self-destruct** *(new in v1.1)* — enter the wrong password **3 times in a row** and AEGIS erases every trace of local data: accounts, history, bookmarks, downloads, cookies/localStorage (workspace partitions) **and the whole Chromium profile** — site permission grants, Local State, DIPS bounce-tracking records, ad interest groups. The failed-attempt counter is stored on disk in the main process, so restarting the app cannot reset it; only a successful login does. Profile files Windows refuses to delete while Chromium still holds them are queued in `pending-wipe.json` and removed at the next launch, before anything is opened. The login screen keeps showing what happened — even after a restart — until a new account is created. Afterwards it is fully usable again with a fresh, empty database.
 - **Default browser integration** *(new in v1.1)* — registers a proper ProgId + `RegisteredApplications` capabilities entry so Windows Settings lists AEGIS; deep-links straight to its default-apps page. Links clicked anywhere in Windows open in a new AEGIS tab (cold start via `process.argv`, running instance via `second-instance`).
 - **Network speed controls** *(new in v1.1)* — multi-connection parallel downloads, plus an opt-in **Secure DNS (DNS-over-HTTPS)** toggle in Settings.
 
@@ -53,7 +53,7 @@ Otherwise it uses the standard per-user `%APPDATA%` location.
 - `preload.js` — `contextBridge` (exposed as `window.ghost`) — the only renderer→main surface.
 - `login.html`, `workspace.html`, `controls.html`, `dashboard.html`, `settings.html`, `parameters.html`, `confirm-quit.html` — renderer pages.
 - `audit.js` — static consistency check (JS/inline-script syntax, bridge-method coverage, IPC channel symmetry). Run with `node audit.js` before releasing.
-- `test-wipe.js` — end-to-end test of the login self-destruct (`node test-wipe.js`). It copies the app into a temp sandbox, forces portable mode there so all data lands inside the sandbox, then drives the real login page over the Chrome DevTools Protocol: register, 2 failed logins, **app restart** (proving the counter survives), 3rd failure triggers the wipe, and a new account still works afterwards. It finishes by asserting the project's own `data/` folder is byte-for-byte untouched.
+- `test-wipe.js` — E2E test for the login self-destruct (36 checks). Copies the app into a temp sandbox with portable mode, drives the real login page over CDP through 4 phases (counter survives a restart → wipe → leftovers erased on the next launch → app reusable), and proves the project `data\` folder is never touched. Run with `node test-wipe.js`.
 
 ## License
 

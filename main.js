@@ -38,6 +38,85 @@ const { execFile } = require('child_process');
   }
 })();
 
+// ── Self-destruct support (3 wrong passwords → wipe everything) ──
+// Both markers live in the data folder and are written BEFORE anything is
+// deleted, so they survive the wipe itself:
+//   pending-wipe.json — retried by runPendingWipe() on the next launch
+//   wipe-notice.json  — tells the user what happened, even after a restart
+const PENDING_WIPE_PATH = path.join(app.getPath('userData'), 'pending-wipe.json');
+const WIPE_NOTICE_PATH = path.join(app.getPath('userData'), 'wipe-notice.json');
+const WIPED_MSG = 'Too many failed attempts. All local data has been deleted. Please create a new account.';
+
+function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch (e) {} }
+function clearWipeNotice() { try { fs.unlinkSync(WIPE_NOTICE_PATH); } catch (e) {} }
+
+// The only entries a wipe leaves behind: a repo placeholder, the
+// single-instance lock of a running copy, and our own two marker files.
+function keptOnWipe(name) {
+  return name === '.gitkeep' || name.startsWith('Singleton') ||
+         name.startsWith('pending-wipe') || name.startsWith('wipe-notice');
+}
+
+// Deletes EVERYTHING inside dir, then recreates it.
+// A hand-maintained allowlist was tried first and already missed items Electron
+// 35 writes (Preferences, Local State, DIPS, InterestGroups, SharedStorage,
+// PrivateAggregation, Shared Dictionary, Dawn caches) — a directory that holds
+// nothing but browser profile data is emptied wholesale instead.
+// Windows refuses to unlink files Chromium still has open; those are retried
+// by runPendingWipe() before the next launch opens any session file.
+function emptyDir(dir) {
+  const sessionDir = app.getPath('sessionData');
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch (e) { /* missing */ }
+  for (const n of names) {
+    if (keptOnWipe(n)) continue;
+    const p = path.join(dir, n);
+    // portable mode: userData contains the session dir itself — already emptied
+    if (path.resolve(p) === path.resolve(sessionDir)) continue;
+    rmrf(p);
+  }
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+}
+
+// Everything that should now be gone but is still on disk (locked / re-flushed
+// by Chromium as it shut down).
+function wipeLeftovers() {
+  const left = [];
+  const sessionDir = app.getPath('sessionData');
+  [app.getPath('sessionData'), app.getPath('userData')].forEach(dir => {
+    try {
+      fs.readdirSync(dir).forEach(n => {
+        if (keptOnWipe(n)) return;
+        const p = path.join(dir, n);
+        if (path.resolve(p) === path.resolve(sessionDir)) return;  // counted via its own pass
+        left.push(p);
+      });
+    } catch (e) {}
+  });
+  return left;
+}
+
+function wipeDataFolders() {
+  emptyDir(app.getPath('sessionData'));   // Chromium profile (cookies, localStorage, DIPS…)
+  emptyDir(app.getPath('userData'));      // AEGIS data (database, prefs, legacy store…)
+  const sessionDir = app.getPath('sessionData');
+  if (!fs.existsSync(sessionDir)) { try { fs.mkdirSync(sessionDir, { recursive: true }); } catch (e) {} }
+}
+
+// Runs at startup, BEFORE any session/profile file is opened — the only moment
+// when nothing holds a handle — so it can finish a wipe that the previous run
+// could not complete while Chromium was alive.
+function runPendingWipe() {
+  let info = null;
+  try { info = JSON.parse(fs.readFileSync(PENDING_WIPE_PATH, 'utf8')); } catch (e) { return; }
+  console.log('Finishing data wipe started at', new Date(info.at || 0).toLocaleString(), '...');
+  wipeDataFolders();
+  const left = wipeLeftovers();
+  if (left.length) { console.warn('wipe still blocked, will retry next launch:', left.join(', ')); return; }
+  try { fs.unlinkSync(PENDING_WIPE_PATH); } catch (e) {}
+}
+runPendingWipe();
+
 const TOP = 78;
 const BOTTOM = 22;
 const DB_PATH = path.join(app.getPath('userData'), 'ghostview.db');
@@ -85,6 +164,9 @@ let db;
 let suggestHeight = 0;
 let playingTabs = new Map();
 let powerSaveId = null;
+// Every workspace session this run has opened — wipeAllData() clears their
+// in-memory cookie jars/caches too, not just the files on disk.
+const usedPartitions = new Set();
 
 // ── Analytics ──
 let analyticsEnabled = true;
@@ -640,6 +722,7 @@ function addTab(url, partition, silent) {
   const tabs = currentTabs();
   const id = idCounter++;
   const wsPartition = partition || (currentWorkspace ? 'persist:user_' + currentUser + '_ws_' + currentWorkspace : undefined);
+  if (wsPartition) usedPartitions.add(wsPartition);
   const view = new WebContentsView({
     webPreferences: { sandbox: true, spellcheck: false, partition: wsPartition, disableHtmlFullscreenWindowResize: false, backgroundThrottling: false },
   });
@@ -1537,6 +1620,7 @@ ipcMain.handle('register', (e, pseudo, password) => {
   if (!pseudo || !password || pseudo.length < 2 || password.length < 3) return { ok: false, error: 'Pseudonym (min 2 chars) and password (min 3 chars) required.' };
   if (userExists(pseudo)) return { ok: false, error: 'User already exists.' };
   registerUser(pseudo, password);
+  clearWipeNotice();          // a fresh account means the user has seen the wipe message
   return { ok: true };
 });
 
@@ -1567,12 +1651,18 @@ function writeLoginAttempts(count) {
 }
 function clearLoginAttempts() { try { fs.unlinkSync(LOGIN_ATTEMPTS_PATH); } catch (e) {} }
 
-function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch (e) {} }
-
 // DESTRUCTIVE. Erases accounts, history, bookmarks, downloads, cookies,
-// localStorage, workspace partitions and profile storage, then rebuilds an
-// empty database so the login screen is usable again.
+// localStorage, workspace partitions and the whole browser profile, then
+// rebuilds an empty database so the login screen is usable again.
 async function wipeAllData() {
+  // 0. Markers FIRST: written before a single byte is deleted, so they survive
+  //    even if this run dies halfway. pending-wipe.json makes the next launch
+  //    finish the job (Chromium holds locks on some profile files while it is
+  //    running, and re-flushes Preferences/Local State when it exits);
+  //    wipe-notice.json keeps telling the user what happened afterwards.
+  try { fs.writeFileSync(PENDING_WIPE_PATH, JSON.stringify({ at: Date.now() })); } catch (e) {}
+  try { fs.writeFileSync(WIPE_NOTICE_PATH, JSON.stringify({ at: Date.now(), msg: WIPED_MSG })); } catch (e) {}
+
   // 1. Close any open tab views (normally none — login runs from the login screen)
   try {
     Object.keys(workspaceTabs).forEach(wsId => {
@@ -1589,57 +1679,63 @@ async function wipeAllData() {
   if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
   invalidateBookmarkCache();
 
-  // 2. Database + WAL/SHM/journal sidecars
+  // 2. In-memory state of every workspace session that was ever opened:
+  //    cookie jars, caches and HTTP auth live here, not only on disk.
+  for (const p of usedPartitions) {
+    try {
+      const s = session.fromPartition(p);
+      await s.clearStorageData(); await s.clearCache(); await s.clearAuthCache();
+    } catch (e) {}
+  }
+  usedPartitions.clear();
+
+  // 3. Database + WAL/SHM/journal sidecars
   if (db) { try { db.close(); } catch (e) {} db = null; }
   [DB_PATH, DB_PATH + '-wal', DB_PATH + '-shm', DB_PATH + '-journal'].forEach(f => rmrf(f));
-
-  // 3. Legacy JSON store + backup, network prefs, and the attempt counter itself
-  const userDataDir = app.getPath('userData');
-  ['ghostview-data.json', 'ghostview-data.json.bak', 'net-prefs.json',
-   'login-attempts.json', 'login-attempts.json.tmp']
-    .forEach(f => rmrf(path.join(userDataDir, f)));
 
   // 4. Default session (login window): cache, storage, HTTP auth
   try { await session.defaultSession.clearCache(); } catch (e) {}
   try { await session.defaultSession.clearStorageData(); } catch (e) {}
   try { await session.defaultSession.clearAuthCache(); } catch (e) {}
 
-  // 5. Per-workspace partition data (cookies, localStorage, IndexedDB)
-  const sessionDataDir = app.getPath('sessionData');
-  rmrf(path.join(sessionDataDir, 'Partitions'));
+  // 5. On disk: the entire Chromium profile and the AEGIS data folder
+  //    (database, legacy JSON store, network prefs, attempt counter, cookies,
+  //    localStorage, IndexedDB, Preferences, Local State, DIPS, InterestGroups…)
+  wipeDataFolders();
 
-  // 6. Default-session profile storage on disk (best effort — Chromium may hold handles)
-  ['Cookies', 'Local Storage', 'Session Storage', 'Network', 'IndexedDB', 'WebStorage',
-   'blob_storage', 'Service Worker', 'File System', 'GPUCache', 'Cache', 'Code Cache']
-    .forEach(d => rmrf(path.join(sessionDataDir, d)));
-
-  // 7. Fresh, empty database so login/registration still work
+  // 6. Fresh, empty database so login/registration still work
   initDB();
   prepareStatements();
   invalidateBookmarkCache();
 }
 
-ipcMain.handle('login', async (e, pseudo, password) => {
-  console.log('[dbg] login call, attemptsOnDisk=' + readLoginAttempts());
+// Serializes login attempts: a double-click on Sign In must not race the
+// read-modify-write of the counter (two simultaneous failures would count as
+// one) and must not start two wipes.
+let loginQueue = Promise.resolve();
+
+function handleLogin(pseudo, password) {
   if (!pseudo || !password) return { ok: false, error: 'Enter pseudonym and password.' };
   if (loginUser(pseudo, password)) {
     clearLoginAttempts();
+    clearWipeNotice();
     return { ok: true };
   }
 
   // Failed attempt — 3 strikes and all local data is erased.
   const attempts = readLoginAttempts() + 1;
   if (attempts >= MAX_LOGIN_ATTEMPTS) {
-    console.log('[dbg] WIPE firing, attempts=' + attempts);
     writeLoginAttempts(attempts);          // persisted first: survives even if the wipe fails
-    try { await wipeAllData(); } catch (err) {
-      console.error('wipeAllData failed:', err);
-      // Best-effort recovery so the login screen still accepts a fresh registration
-      try { if (!db) { initDB(); prepareStatements(); } } catch (e2) { console.error('re-init failed:', e2); }
-    }
-    console.log('[dbg] wipe done');
-    clearLoginAttempts();
-    return { ok: false, wiped: true, error: 'Too many failed attempts. All data has been deleted. Please create a new account.' };
+    return wipeAllData()
+      .catch(err => {
+        console.error('wipeAllData failed:', err);
+        // Best-effort recovery so the login screen still accepts a fresh registration
+        try { if (!db) { initDB(); prepareStatements(); } } catch (e2) { console.error('re-init failed:', e2); }
+      })
+      .then(() => {
+        clearLoginAttempts();
+        return { ok: false, wiped: true, error: WIPED_MSG };
+      });
   }
 
   writeLoginAttempts(attempts);
@@ -1649,7 +1745,21 @@ ipcMain.handle('login', async (e, pseudo, password) => {
     attemptsLeft: left,
     error: 'Invalid credentials. ' + left + (left === 1 ? ' attempt left' : ' attempts left') + ' before all data is erased.'
   };
+}
+
+ipcMain.handle('login', (e, pseudo, password) => {
+  const job = loginQueue.then(() => handleLogin(pseudo, password), () => handleLogin(pseudo, password));
+  loginQueue = job.then(() => {}, () => {});
+  return job;
 });
+
+// The login screen asks this on load: if a wipe happened (even in an earlier
+// run, even if the renderer crashed before the answer arrived), say so instead
+// of letting the user think their password is wrong.
+ipcMain.handle('wipe-notice', () =>
+  fs.existsSync(WIPE_NOTICE_PATH)
+    ? (() => { try { const n = JSON.parse(fs.readFileSync(WIPE_NOTICE_PATH, 'utf8')); return { wiped: true, at: n.at, msg: n.msg || WIPED_MSG }; } catch (e) { return { wiped: true, msg: WIPED_MSG }; } })()
+    : { wiped: false });
 
 ipcMain.handle('logout', () => {
   saveUserTabsPersist();
@@ -1965,8 +2075,10 @@ ipcMain.handle('save-tabs', () => { saveUserTabsPersist(); return { ok: true }; 
 function addTabToSplit(url, wsId) {
   const tabs = workspaceTabs[wsId] || [];
   const id = idCounter++;
+  const splitPartition = 'persist:user_' + currentUser + '_ws_' + wsId;
+  usedPartitions.add(splitPartition);
   const view = new WebContentsView({
-    webPreferences: { sandbox: true, spellcheck: false, partition: 'persist:user_' + currentUser + '_ws_' + wsId, disableHtmlFullscreenWindowResize: false, backgroundThrottling: false },
+    webPreferences: { sandbox: true, spellcheck: false, partition: splitPartition, disableHtmlFullscreenWindowResize: false, backgroundThrottling: false },
   });
   const ses = view.webContents.session;
   setupSession(ses, wsId);
