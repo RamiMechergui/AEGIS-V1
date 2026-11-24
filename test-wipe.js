@@ -77,7 +77,10 @@ function setupSandbox() {
   fs.rmSync(SANDBOX, { recursive: true, force: true, maxRetries: 3 });
   fs.mkdirSync(SANDBOX, { recursive: true });
 
-  const files = ['main.js', 'preload.js', 'package.json', 'logo.png', 'logo.ico']
+  // shield.js / shield-list.txt / fp-preload.js are required at runtime by
+  // main.js (Aegis Shield) — without them the sandbox app cannot start.
+  const files = ['main.js', 'preload.js', 'yt-tools.js', 'shield.js', 'shield-list.txt', 'vault.js', 'oauth.js', 'playlist-queue.js',
+    'fp-preload.js', 'package.json', 'logo.png', 'logo.ico']
     .concat(fs.readdirSync(SRC).filter((f) => f.endsWith('.html')));
   for (const f of files) fs.copyFileSync(path.join(SRC, f), path.join(SANDBOX, f));
 
@@ -375,6 +378,11 @@ function dumpState(label) {
     // so this proves the whole chain: main answers wiped:true and login.html
     // renders it (that message branch only exists for wiped responses).
     let msg = await page.ev(`(async () => {
+      // readyApp only waits for the preload bridge, which exists before the
+      // body is parsed — wait for the form itself before filling it in.
+      for (let i = 0; i < 80 && !document.getElementById('login-pseudo'); i++) {
+        await new Promise(r => setTimeout(r, 100));
+      }
       document.getElementById('login-pseudo').value = 'tester';
       document.getElementById('login-pass').value = 'wrong-3';
       document.getElementById('login-btn').click();
@@ -453,8 +461,9 @@ function dumpState(label) {
     check('restarted login screen still reports the wipe', /deleted/i.test(msg || ''), msg);
 
     // Typing dismisses the notice, so the user is not stuck with it forever.
-    msg = await page.ev(`(() => {
-      const i = document.getElementById('login-pseudo');
+    msg = await page.ev(`(async () => {
+      let i = document.getElementById('login-pseudo');
+      for (let k = 0; k < 80 && !i; k++) { await new Promise(r => setTimeout(r, 100)); i = document.getElementById('login-pseudo'); }
       i.value = 'tester'; i.dispatchEvent(new Event('input'));
       return document.getElementById('login-error').textContent;
     })()`);

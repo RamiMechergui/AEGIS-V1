@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  /* Floating URL-bar suggestion dropdown.
+     Rendered in its own transparent WebContentsView added ABOVE the page views
+     (main.js 'suggest-overlay'), so it layers over the page without pushing it.
+     The card mirrors #suggest in controls.html EXACTLY (same box model, fonts,
+     paddings) so its height always equals the measured offsetHeight the chrome
+     copy reports — placement lands pixel-perfect under the search bar. */
+  :root{
+    --blue:#4a8bc5;
+    --blue-bg:rgba(74,139,197,0.07);
+    --purple:#7a5db5;
+    --purple-bg:rgba(122,93,181,0.07);
+    --text2:#88889c;
+    --text3:#58586e;
+    --ease-out:cubic-bezier(0, 0, 0.2, 1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:transparent;overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter','Helvetica Neue',system-ui,sans-serif;
+    font-size:13px;line-height:1.45;color:var(--text2);user-select:none;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+  /* ── Card (== #suggest in controls.html + 4/8px inset for the drop shadow) ── */
+  #card{position:absolute;top:4px;left:8px;right:8px;
+    background:#0d0e1b;border:1px solid rgba(255,255,255,0.12);border-radius:10px;
+    max-height:260px;overflow-y:auto;overflow-x:hidden;padding:5px 0;
+    box-shadow:0 16px 48px rgba(0,0,0,0.65),0 4px 14px rgba(0,0,0,0.45);
+    animation:fadeSlideIn .15s var(--ease-out)}
+
+  /* .si mirrors #suggest .si in controls.html PLUS the general `.si` input rule
+     (password fields) that has always collided with suggestion items by class
+     name: darker fill, 1px border, 6px radius, 8px gap after each row. Reproducing
+     it keeps the card's height byte-identical to the measured copy. */
+  .si{width:100%;padding:7px 12px;cursor:pointer;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:9px;transition:all .1s;
+    background:#08080e;border:1px solid rgba(255,255,255,0.03);border-radius:6px;margin-bottom:8px;outline:none}
+  .si:hover,.si.sel{background:var(--blue-bg);color:#ffffff}
+  body.accent-purple .si:hover,body.accent-purple .si.sel{background:var(--purple-bg);color:#ffffff}
+  .si-icon{width:13px;height:13px;color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .si:hover .si-icon,.si.sel .si-icon{color:var(--blue)}
+  body.accent-purple .si:hover .si-icon,body.accent-purple .si.sel .si-icon{color:var(--purple)}
+  .si .siq{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .si .sit{font-size:9.5px;color:var(--text3);flex-shrink:0;opacity:0.7}
+
+  /* Same scrollbar metrics as controls.html (3px pill thumb) */
+  ::-webkit-scrollbar{width:3px;height:3px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.055);border-radius:999px}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.09)}
+
+  @keyframes fadeSlideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div id="card"></div>
+<script>
+  const g = window.ghost;
+  const card = document.getElementById('card');
+  const searchSvg = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="3.5"/><path d="M10 10l3.5 3.5"/></svg>';
+
+  function esc(s) { const _e = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}; return String(s==null?'':s).replace(/[&<>"']/g, c => _e[c]); }
+
+  function render(d) {
+    const items = (d && d.items) || [];
+    const sel = (d && typeof d.sel === 'number') ? d.sel : -1;
+    document.body.classList.toggle('accent-purple', !!(d && d.accent === 'purple'));
+    card.innerHTML = items.map((s, i) =>
+      '<div class="si' + (i === sel ? ' sel' : '') + '" data-idx="' + i + '">' +
+        '<span class="si-icon">' + searchSvg + '</span>' +
+        '<span class="siq">' + esc(s) + '</span>' +
+        '<span class="sit">Search</span>' +
+      '</div>'
+    ).join('');
+    const selEl = card.querySelector('.si.sel');
+    if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+  }
+
+  // mousedown (not click) so the URL-bar input never loses focus mid-pick;
+  // preventDefault keeps the caret put while the pick IPC round-trips.
+  card.addEventListener('mousedown', (e) => {
+    const si = e.target.closest('.si');
+    if (!si) return;
+    e.preventDefault();
+    const idx = parseInt(si.dataset.idx, 10);
+    if (!isNaN(idx)) g.suggestPick(idx);
+  });
+
+  if (g && g.onSuggestData) g.onSuggestData(render);
+</script>
+</body>
+</html>

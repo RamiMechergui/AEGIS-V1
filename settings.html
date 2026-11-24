@@ -116,6 +116,17 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sa
     <div id="cp-msg" class="msg"></div>
   </div>
 
+  <!-- Duress Password (panic decoy) -->
+  <div class="card" id="duress-card">
+    <div class="card-title">Duress Password</div>
+    <div class="card-desc">A second password that opens a separate, believable account with nothing in it. Your real account, workspaces and history stay untouched on disk — nothing is deleted, and the login looks completely normal.</div>
+    <div class="input-group"><input type="password" class="st-input" id="dp-pw" placeholder="Duress password (min 3 chars)"></div>
+    <div class="input-group"><input type="password" class="st-input" id="dp-pw2" placeholder="Confirm duress password"></div>
+    <button class="btn btn-primary" id="dp-btn">Set Duress Password</button>
+    <button class="btn btn-ghost" id="dp-remove" style="display:none">Remove duress password</button>
+    <div id="dp-msg" class="msg"></div>
+  </div>
+
   <!-- Browsing History -->
   <div class="card">
     <div class="card-title">Browsing History</div>
@@ -141,6 +152,46 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sa
       <span class="switch"></span>
     </label>
     <div id="dns-msg" class="msg"></div>
+  </div>
+
+  <!-- Aegis Shield (local privacy engine) -->
+  <div class="card">
+    <div class="card-title">Aegis Shield</div>
+    <div class="card-desc">Local privacy engine: blocks ads &amp; trackers <b>before the request leaves your machine</b>, randomizes canvas/WebGL fingerprint readbacks, and strips tracking tags (utm_*, fbclid, gclid&hellip;) from every URL. Rules live in shield-list.txt; drop a shield-custom.txt into the profile folder for your own (restart to load it).</div>
+    <label class="switch-row">
+      <span>Ad &amp; tracker blocking</span>
+      <input type="checkbox" id="sh-block" class="switch-input">
+      <span class="switch"></span>
+    </label>
+    <label class="switch-row">
+      <span>Canvas &amp; WebGL fingerprint randomizer</span>
+      <input type="checkbox" id="sh-fp" class="switch-input">
+      <span class="switch"></span>
+    </label>
+    <label class="switch-row">
+      <span>Tracking parameter strip</span>
+      <input type="checkbox" id="sh-strip" class="switch-input">
+      <span class="switch"></span>
+    </label>
+    <div class="card-desc" style="margin-top:12px;margin-bottom:0" id="sh-stats">Loading shield status&hellip;</div>
+    <div id="sh-msg" class="msg"></div>
+  </div>
+
+  <!-- Clipboard auto-wipe -->
+  <div class="card">
+    <div class="card-title">Clipboard Auto-Wipe</div>
+    <div class="card-desc">Text copied while AEGIS is running — from the right-click menu, from a page, or with plain Ctrl+C — is cleared from the clipboard after the delay below. Only text that is still exactly what was copied is cleared: a newer copy replaces what is being watched and is never touched by an older timer.</div>
+    <label class="switch-row">
+      <span>Auto-wipe clipboard</span>
+      <input type="checkbox" id="cw-toggle" class="switch-input">
+      <span class="switch"></span>
+    </label>
+    <div class="switch-row" style="cursor:default">
+      <span>Clear after (5&ndash;600 seconds)</span>
+      <input type="number" id="cw-seconds" class="st-input" min="5" max="600" step="1" style="width:86px;padding:6px 10px;text-align:center">
+    </div>
+    <div class="card-desc" style="margin-top:8px;margin-bottom:0">Windows keeps its own clipboard history (Win+V). That list belongs to the operating system, is outside any application's reach, and is not cleared by AEGIS &mdash; turn it off in Windows settings if copied text must not be remembered there.</div>
+    <div id="cw-msg" class="msg"></div>
   </div>
 
   <div class="footer">AEGIS v1.0 &mdash; Zero tracking. Zero cache.</div>
@@ -217,6 +268,58 @@ document.getElementById('hist-btn').onclick = () => {
   window.close();
 };
 
+// ── Duress Password (panic decoy) ──
+// Set/removed only from a real session; inside a decoy session every attempt
+// comes back with the ordinary "Current password is incorrect." so the card
+// itself never betrays that a decoy is running.
+const dpPw = document.getElementById('dp-pw');
+const dpPw2 = document.getElementById('dp-pw2');
+const dpBtn = document.getElementById('dp-btn');
+const dpRemove = document.getElementById('dp-remove');
+const dpMsg = document.getElementById('dp-msg');
+
+async function refreshDuressState() {
+  try {
+    const u = await g.getUser();
+    if (!u) return;
+    dpRemove.style.display = u.duressSet ? '' : 'none';
+    if (u.duressSet) { dpMsg.textContent = 'A duress password is set.'; dpMsg.className = 'msg msg-ok'; }
+  } catch (e) {}
+}
+
+dpBtn.onclick = async () => {
+  const p1 = dpPw.value, p2 = dpPw2.value;
+  dpMsg.className = 'msg'; dpMsg.textContent = '';
+  if (!p1 || !p2) { dpMsg.textContent = 'Fill in both fields.'; dpMsg.className = 'msg msg-err'; return; }
+  if (p1 !== p2) { dpMsg.textContent = 'Passwords do not match.'; dpMsg.className = 'msg msg-err'; return; }
+  if (p1.length < 3) { dpMsg.textContent = 'Min 3 characters.'; dpMsg.className = 'msg msg-err'; return; }
+  dpBtn.disabled = true; dpBtn.textContent = 'Saving...';
+  const r = await g.setDuressPassword(p1);
+  dpBtn.disabled = false; dpBtn.textContent = 'Set Duress Password';
+  if (r.ok) {
+    dpMsg.textContent = 'Duress password set. Signing in with it opens the decoy account.'; dpMsg.className = 'msg msg-ok';
+    dpPw.value = ''; dpPw2.value = '';
+    dpRemove.style.display = '';
+  } else {
+    dpMsg.textContent = r.error || 'Could not set the duress password.'; dpMsg.className = 'msg msg-err';
+  }
+};
+
+dpRemove.onclick = async () => {
+  dpMsg.className = 'msg'; dpMsg.textContent = '';
+  dpRemove.disabled = true;
+  const r = await g.setDuressPassword(null);
+  dpRemove.disabled = false;
+  if (r.ok) {
+    dpMsg.textContent = 'Duress password removed.'; dpMsg.className = 'msg msg-ok';
+    dpRemove.style.display = 'none';
+  } else {
+    dpMsg.textContent = r.error || 'Could not remove the duress password.'; dpMsg.className = 'msg msg-err';
+  }
+};
+
+refreshDuressState();
+
 // Default browser
 const dbStatus = document.getElementById('db-status');
 const dbBtn = document.getElementById('db-btn');
@@ -274,6 +377,92 @@ dnsToggle.onchange = async () => {
     dnsMsg.className = 'msg msg-err';
   }
 };
+
+// Aegis Shield — local privacy engine (blocker, fingerprint randomizer, URL cleaner)
+const shBlock = document.getElementById('sh-block');
+const shFp = document.getElementById('sh-fp');
+const shStrip = document.getElementById('sh-strip');
+const shMsg = document.getElementById('sh-msg');
+const shStats = document.getElementById('sh-stats');
+
+async function paintShieldStats() {
+  try {
+    const s = await g.getShieldStats();
+    if (!s) return;
+    shStats.textContent = s.rules + ' rules loaded'
+      + (s.customRules ? ' (+' + s.customRules + ' custom)' : '')
+      + ' \u00b7 ' + s.blocked + ' requests blocked this session'
+      + ' \u00b7 ' + s.stripped + ' tracking tags stripped';
+  } catch (e) { /* stats are informational only */ }
+}
+
+async function loadShieldPrefs() {
+  try {
+    const p = await g.getShieldPrefs();
+    if (!p) return;
+    shBlock.checked = !!p.blockAds;
+    shFp.checked = !!p.fpRandomizer;
+    shStrip.checked = !!p.stripParams;
+  } catch (e) {}
+  paintShieldStats();
+}
+
+function shieldToggle(el, name) {
+  el.onchange = async () => {
+    shMsg.className = 'msg'; shMsg.textContent = '';
+    const r = await g.setShieldPrefs({
+      blockAds: shBlock.checked, fpRandomizer: shFp.checked, stripParams: shStrip.checked,
+    });
+    if (r && typeof r.blockAds === 'boolean') {
+      shMsg.textContent = name + (el.checked ? ' enabled' : ' disabled')
+        + (el === shFp ? ' — applies to pages loaded after this change.' : ' — active immediately.');
+      shMsg.className = 'msg msg-ok';
+      paintShieldStats();
+    } else {
+      shMsg.textContent = 'Could not save this setting.';
+      shMsg.className = 'msg msg-err';
+    }
+  };
+}
+shieldToggle(shBlock, 'Ad & tracker blocking');
+shieldToggle(shFp, 'Fingerprint randomizer');
+shieldToggle(shStrip, 'Tracking parameter strip');
+
+loadShieldPrefs();
+
+// Clipboard auto-wipe (main process arms it; this card only configures it)
+const cwToggle = document.getElementById('cw-toggle');
+const cwSeconds = document.getElementById('cw-seconds');
+const cwMsg = document.getElementById('cw-msg');
+
+async function loadClipPrefs() {
+  try {
+    const p = await g.getClipboardPrefs();
+    if (!p) return;
+    cwToggle.checked = !!p.enabled;
+    cwSeconds.value = p.seconds;
+  } catch (e) {}
+}
+
+async function saveClipPrefs() {
+  cwMsg.className = 'msg'; cwMsg.textContent = '';
+  const raw = Number(cwSeconds.value);
+  const r = await g.setClipboardPrefs({ enabled: cwToggle.checked, seconds: raw });
+  if (r && r.ok) {
+    cwSeconds.value = r.seconds; // clamp result (5–600) shown back to the user
+    cwMsg.textContent = r.enabled
+      ? 'Copied text will be cleared ' + r.seconds + ' s after it is copied.'
+      : 'Clipboard auto-wipe is off — copied text stays on the clipboard.';
+    cwMsg.className = 'msg msg-ok';
+  } else {
+    cwMsg.textContent = (r && r.error) || 'Could not save this setting.';
+    cwMsg.className = 'msg msg-err';
+  }
+}
+
+cwToggle.onchange = saveClipPrefs;
+cwSeconds.onchange = saveClipPrefs;
+loadClipPrefs();
 
 // Load user data
 g.getUser().then(u => {

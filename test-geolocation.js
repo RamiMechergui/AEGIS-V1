@@ -92,7 +92,10 @@ function setupSandbox() {
   fs.rmSync(SANDBOX, { recursive: true, force: true, maxRetries: 3 });
   fs.mkdirSync(SANDBOX, { recursive: true });
 
-  const files = ['main.js', 'preload.js', 'package.json', 'logo.png', 'logo.ico']
+  // shield.js / shield-list.txt / fp-preload.js are required at runtime by
+  // main.js (Aegis Shield) — without them the sandbox app cannot start.
+  const files = ['main.js', 'preload.js', 'yt-tools.js', 'shield.js', 'shield-list.txt', 'vault.js', 'oauth.js', 'playlist-queue.js',
+    'fp-preload.js', 'package.json', 'logo.png', 'logo.ico']
     .concat(fs.readdirSync(SRC).filter((f) => f.endsWith('.html')));
   for (const f of files) fs.copyFileSync(path.join(SRC, f), path.join(SANDBOX, f));
 

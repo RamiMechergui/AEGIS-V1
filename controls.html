@@ -95,9 +95,15 @@ body.chrome-hidden .area { flex: 1; }
 .uc:hover{border-color:var(--border2);background:var(--surface3)}
 .uc:focus-within{border-color:var(--border3);box-shadow:0 0 0 3px var(--blue-glow);background:var(--surface2)}
 
-/* ── Suggestions (dropdown appears BELOW tabs bar, not overlapping it) ── */
-#suggest,#suggest-right{display:none;position:absolute;top:calc(100% + 38px);left:0;right:0;background:#0d0e1b;border:1px solid rgba(255,255,255,0.12);border-radius:10px;z-index:999;-webkit-app-region:no-drag;box-shadow:0 12px 36px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.05) inset;overflow:hidden;padding:5px 0}
-#suggest.open,#suggest-right.open{display:block;animation:fadeSlideIn .15s var(--ease-out)}
+/* ── Suggestions: FLOATING OVERLAY under the search bar (never pushes layout) ── */
+/* The .open copy is visibility:hidden: it exists ONLY to be measured (offsetHeight
+   feeds the overlay bounds in main.js). The visible dropdown is suggest-overlay.html
+   rendered in its own WebContentsView stacked ABOVE the page, so it floats on top
+   without ever shoving the page down. There is deliberately NO in-page fallback:
+   the menu only ever overlays — if the overlay view can't open, it retries and
+   then stays hidden rather than taking layout space. */
+#suggest,#suggest-right{display:none;position:absolute;top:100%;left:0;right:0;z-index:1000;max-height:260px;overflow-y:auto;background:#0d0e1b;border:1px solid rgba(255,255,255,0.12);border-radius:10px;-webkit-app-region:no-drag;box-shadow:0 16px 48px rgba(0,0,0,0.65),0 4px 14px rgba(0,0,0,0.45);padding:5px 0}
+#suggest.open,#suggest-right.open{display:block;visibility:hidden;animation:fadeSlideIn .15s var(--ease-out)}
 #suggest .si,#suggest-right .si{padding:7px 12px;cursor:pointer;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:9px;transition:all .1s}
 #suggest .si:hover,#suggest .si.sel{background:var(--blue-bg);color:#ffffff}
 #suggest-right .si:hover,#suggest-right .si.sel{background:var(--purple-bg);color:#ffffff}
@@ -136,6 +142,13 @@ body.chrome-hidden .area { flex: 1; }
 #dl-btn{position:relative}
 #dl-badge{position:absolute;top:-2px;right:-2px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:var(--green);color:#fff;font-size:6.5px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:5;pointer-events:none;border:2px solid var(--surface);transition:transform .25s var(--ease-spring);transform:scale(0)}
 #dl-badge.show{transform:scale(1)}
+/* Fullscreen clock: lives in the top-right button group and exists ONLY while
+   AEGIS is fullscreen (body.fs toggled by the fs-change IPC below). */
+#tb-clock{display:none;align-items:center;gap:5px;height:28px;padding:0 9px;margin-left:4px;border-radius:var(--radius-sm);background:var(--surface2);border:1px solid var(--border2);color:var(--text2);font-size:10.5px;font-weight:600;letter-spacing:0.4px;font-variant-numeric:tabular-nums;white-space:nowrap;cursor:default;user-select:none;-webkit-app-region:no-drag}
+#tb-clock svg{width:11px;height:11px;opacity:.8;flex-shrink:0}
+body.fs #tb-clock{display:flex}
+/* Never let the clock squeeze the toolbar buttons off-screen on narrow windows */
+@media (max-width: 980px){ body.fs #tb-clock{display:none} }
 
 /* ── Find Bar ── */
 #find{display:none;align-items:center;gap:6px;padding:3px 10px;height:28px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
@@ -234,6 +247,81 @@ body.fs #tabs{border-bottom:1px solid var(--border)}
 .pbody::-webkit-scrollbar-track,.panel ::-webkit-scrollbar-track{background:transparent}
 .pbody::-webkit-scrollbar-thumb,.panel ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .pbody::-webkit-scrollbar-thumb:hover{background:var(--border3)}
+
+/* ── Connection panel (public IP, country, governorate, ISP) ── */
+.cn-hero{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 14px 16px;border-bottom:1px solid var(--border);margin-bottom:12px;background:radial-gradient(120% 90% at 50% 0%,var(--green-bg),transparent 70%);border-radius:var(--radius);border:1px solid var(--border)}
+.cn-flag{font-size:24px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.4))}
+.cn-ip{display:flex;align-items:center;gap:7px}
+.cn-ip b{font-size:15px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:0.4px}
+.cn-copy{background:transparent;border:none;color:var(--text3);cursor:pointer;width:22px;height:22px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;transition:all .12s}
+.cn-copy:hover{background:var(--border2);color:var(--text)}
+.cn-copy.ok{color:var(--green)}
+.cn-loc{font-size:10.5px;color:var(--text2);text-align:center;line-height:1.45}
+.cn-rows{display:flex;flex-direction:column}
+.cn-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,0.045)}
+.cn-row:last-child{border-bottom:none}
+.cn-k{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.6px;padding-top:2px;flex-shrink:0}
+.cn-v{font-size:11px;color:var(--text);text-align:right;word-break:break-word;line-height:1.45;user-select:text}
+.cn-v small{display:block;font-size:9px;color:var(--text3);margin-top:1px}
+.cn-note{font-size:9px;color:var(--text3);text-align:center;margin-top:12px;line-height:1.5}
+/* Scroll area + fixed footer so the speed-test button is always reachable */
+.cn-scroll{padding:14px 20px;flex:1;overflow-y:auto}
+#cn-body{display:flex;flex-direction:column}
+/* The empty/loading state should fill the panel — but only it: stretching the
+   whole body to the viewport would leave a hole before the speed-test block. */
+#cn-body:has(.he){min-height:100%}
+#cn-body .he{flex:1;height:auto;min-height:300px}
+#speed-body{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.cn-foot{flex-shrink:0;padding:10px 20px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:7px}
+#cn-speed-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 14px;
+  background:var(--blue-bg);border:1px solid rgba(74,139,197,0.18);border-radius:var(--radius);color:var(--blue);
+  font-size:11px;font-family:inherit;font-weight:500;letter-spacing:0.2px;cursor:pointer;
+  transition:all .2s var(--ease-out)}
+#cn-speed-btn:hover{background:var(--blue-bg-hover);transform:translateY(-1px);box-shadow:0 2px 12px var(--blue-glow)}
+#cn-speed-btn:active{transform:translateY(0)}
+#cn-speed-btn:disabled{opacity:.6;cursor:default;transform:none;box-shadow:none}
+#cn-speed-btn svg{width:13px;height:13px;flex-shrink:0}
+#speed-msg{font-size:9px;color:var(--text3);text-align:center;min-height:11px;line-height:1.45}
+
+/* ── Speed test (progress + report, rendered inside the Connection panel) ── */
+.sp-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.sp-hdr b{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.6px;font-weight:500}
+.sp-hdr span{font-size:8.5px;color:var(--text3)}
+.sp-prog{display:flex;flex-direction:column;gap:9px;padding:13px 12px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--radius)}
+.sp-phase{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--text)}
+.sp-phase em{font-style:normal;font-size:9.5px;color:var(--text3);font-variant-numeric:tabular-nums}
+.sp-track{height:5px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-pill);overflow:hidden}
+.sp-fill{height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--purple));border-radius:var(--radius-pill);
+  transition:width .3s var(--ease-out)}
+.sp-steps{display:flex;gap:5px}
+.sp-step{flex:1;height:3px;border-radius:3px;background:var(--border2);transition:background .25s var(--ease-out)}
+.sp-step.on{background:var(--blue)}
+.sp-live{font-size:10px;color:var(--text2);text-align:center;min-height:13px;font-variant-numeric:tabular-nums}
+.sp-score{display:flex;flex-direction:column;align-items:center;gap:7px;padding:15px 12px;border:1px solid var(--border);
+  border-radius:var(--radius);background:radial-gradient(120% 90% at 50% 0%,var(--sc-tint,var(--blue-bg)),transparent 70%)}
+.sp-num{font-size:30px;font-weight:600;letter-spacing:1px;line-height:1;font-variant-numeric:tabular-nums;color:var(--sc,var(--blue))}
+.sp-num small{font-size:11px;font-weight:400;color:var(--text3);letter-spacing:0}
+.sp-badge{font-size:9px;font-weight:600;letter-spacing:0.7px;text-transform:uppercase;padding:3px 11px;border-radius:var(--radius-pill)}
+.sp-verdict{font-size:10.5px;color:var(--text2);text-align:center;line-height:1.55}
+.sp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
+.sp-tile{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 6px;text-align:center;min-width:0}
+.sp-tile .k{font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px}
+.sp-tile .v{font-size:15px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;margin-top:3px;word-break:break-all}
+.sp-tile .u{font-size:8.5px;color:var(--text3)}
+.sp-tile .s{font-size:8.5px;color:var(--text3);margin-top:2px}
+.sp-tile.miss .v{color:var(--text3)}
+.sp-uses{margin-top:11px;display:flex;flex-direction:column}
+.sp-use{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 2px;
+  border-bottom:1px solid rgba(255,255,255,0.045);font-size:10.5px;color:var(--text2)}
+.sp-use:last-child{border-bottom:none}
+.sp-use i{font-style:normal;font-size:9px;font-weight:600;letter-spacing:0.3px;flex-shrink:0}
+.sp-t-good{color:var(--green)} .sp-t-ok{color:var(--blue)} .sp-t-mid{color:var(--yellow)} .sp-t-bad{color:var(--red)}
+.sp-tips{margin-top:11px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);font-size:9.5px;color:var(--text2);line-height:1.55}
+.sp-tips b{display:block;font-size:8.5px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;
+  font-weight:500;margin-bottom:3px}
+.sp-tips div+div{margin-top:4px}
 
 /* ── Notes (side bar like History, opened from its own toolbar icon) ── */
 .notes-composer{padding:12px 20px 8px;border-bottom:1px solid var(--border);flex-shrink:0}
@@ -387,6 +475,153 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
 #zoom-popup.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #zoom-popup .zp-icon{display:inline-flex;vertical-align:middle;margin-right:5px}
 #zoom-popup .zp-icon svg{width:12px;height:12px}
+
+/* ── YouTube download: toolbar button (visible only on youtube.com) + quality popover ── */
+#tb #yt-btn{width:auto;padding:0 9px;gap:5px;height:28px;letter-spacing:0.2px;background:rgba(229,106,106,0.12);border:1px solid rgba(229,106,106,0.35);color:var(--red)}
+#tb #yt-btn:hover{background:rgba(229,106,106,0.2);color:#ff8f8f;border-color:rgba(229,106,106,0.55)}
+#tb #yt-btn .yt-lbl{font-size:10px;font-weight:600;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;max-width:96px}
+@media (max-width: 1180px){ #tb #yt-btn .yt-lbl{display:none} #tb #yt-btn{width:30px;padding:0} }
+/* "Download Full Playlist" — same slot family as the single-video button but
+   blue, so the two never look like the same action. Only visible on a complete
+   playlist page (see isYouTubePlaylistUrl). */
+#tb #ytpb-btn{width:auto;padding:0 9px;gap:5px;height:28px;letter-spacing:0.2px;background:rgba(66,153,225,0.12);border:1px solid rgba(66,153,225,0.35);color:var(--blue)}
+#tb #ytpb-btn:hover{background:rgba(66,153,225,0.2);color:#7cc4f7;border-color:rgba(66,153,225,0.55)}
+#tb #ytpb-btn .yt-lbl{font-size:10px;font-weight:600;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+@media (max-width: 1180px){ #tb #ytpb-btn .yt-lbl{display:none} #tb #ytpb-btn{width:30px;padding:0} }
+
+#ytp{display:none;position:fixed;z-index:60;width:340px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);background:rgba(13,14,27,0.985);border:1px solid var(--border2);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.65),0 4px 14px rgba(0,0,0,0.45);overflow:hidden;animation:ytp-in .18s var(--ease-out)}
+#ytp.open{display:flex;flex-direction:column}
+@keyframes ytp-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.ytp-head{display:flex;gap:10px;padding:11px 11px 9px;align-items:flex-start;border-bottom:1px solid var(--border);flex:none}
+#ytp-thumb{width:64px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);flex:none}
+.ytp-meta{flex:1;min-width:0}
+#ytp-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+#ytp-sub{font-size:10px;color:var(--text3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ytp-x{width:22px;height:22px;flex:none;background:transparent;border:none;color:var(--text3);cursor:pointer;border-radius:5px;display:flex;align-items:center;justify-content:center}
+#ytp-x:hover{background:var(--border2);color:var(--text)}
+#ytp-x svg{width:11px;height:11px}
+#ytp-body{padding:10px 11px 11px;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.ytp-load{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--text2);padding:12px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px}
+.ytp-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--border2);border-top-color:var(--blue);animation:ytp-spin .8s linear infinite;flex:none}
+@keyframes ytp-spin{to{transform:rotate(360deg)}}
+/* Header above the list: label left, live count right */
+.ytp-qhead{font-size:9.5px;letter-spacing:0.6px;text-transform:uppercase;color:var(--text3);margin:2px 0 7px;display:flex;justify-content:space-between;align-items:center}
+.ytp-qhead span:last-child{color:var(--text2);font-weight:600}
+/* The qualities live in ONE bordered group (radio list) instead of N loose
+   cards: quieter, denser, and the selected row reads instantly. The group is
+   also the scroll container — a long list caps here and scrolls instead of
+   growing under the destination/CTA block below. */
+.ytp-qlist{display:flex;flex-direction:column;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;overflow-x:hidden;overflow-y:auto;max-height:min(230px,42vh);overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.16) transparent}
+/* Sleek 6px scrollbar (Chromium + Firefox), only while it can scroll */
+.ytp-qlist::-webkit-scrollbar{width:6px;height:6px}
+.ytp-qlist::-webkit-scrollbar-track{background:transparent}
+.ytp-qlist::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.14);border-radius:99px}
+.ytp-qlist::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.26)}
+.ytp-qlist::-webkit-scrollbar-corner{background:transparent}
+.ytp-q{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;background:transparent;border:0;border-bottom:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:12px;text-align:left;position:relative;transition:background .12s var(--ease-out),color .12s var(--ease-out)}
+.ytp-qlist .ytp-q:last-child{border-bottom:0}
+.ytp-q:hover{background:rgba(255,255,255,0.045);color:var(--text)}
+.ytp-q:focus-visible{outline:none;background:rgba(255,255,255,0.06);box-shadow:inset 0 0 0 2px rgba(66,153,225,0.5)}
+/* Accent rail on the selected row (clipped by the group's radius) */
+.ytp-q::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:transparent;transition:background .12s var(--ease-out)}
+.ytp-q.sel{background:rgba(229,106,106,0.13);color:var(--text)}
+.ytp-q.sel::before{background:var(--red)}
+.ytp-dot{width:14px;height:14px;flex:none;border-radius:50%;border:1.5px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;transition:all .12s var(--ease-out)}
+.ytp-q:hover .ytp-dot{border-color:rgba(255,255,255,0.34)}
+.ytp-q.sel .ytp-dot{border-color:var(--red);background:radial-gradient(circle at center,var(--red) 0 45%,transparent 47%);box-shadow:0 0 0 3px rgba(229,106,106,0.16)}
+.ytp-qh{font-weight:700;font-size:12.5px;color:var(--text);min-width:50px;flex:none;letter-spacing:0.2px;font-variant-numeric:tabular-nums}
+.ytp-qs{color:var(--text3);font-size:10.5px;font-variant-numeric:tabular-nums;flex:1;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ytp-q.sel .ytp-qs{color:#f0b6b6}
+.ytp-qdef{font-size:8.5px;font-weight:700;background:rgba(255,255,255,0.07);color:var(--text2);padding:2px 7px;border-radius:999px;letter-spacing:0.4px;text-transform:uppercase;flex:none}
+.ytp-q.sel .ytp-qdef{background:rgba(229,106,106,0.3);color:#ffc2c2}
+/* ── Below the qualities: destination, summary, primary action ── */
+.ytp-dest{margin-top:11px}
+.ytp-flbl{font-size:9.5px;letter-spacing:0.6px;text-transform:uppercase;color:var(--text3);margin:0 0 6px 1px}
+.ytp-dir{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text2);cursor:pointer;font-size:11.5px;text-align:left;transition:all .12s var(--ease-out)}
+.ytp-dir:hover{border-color:rgba(229,106,106,0.45);background:rgba(255,255,255,0.035);color:var(--text)}
+.ytp-dir:focus-visible{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(66,153,225,0.3)}
+.ytp-dir svg{width:16px;height:16px;flex:none;color:var(--blue)}
+.ytp-dirp{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ytp-dirc{font-size:9.5px;font-weight:700;color:var(--blue);flex:none;letter-spacing:0.4px;text-transform:uppercase}
+.ytp-sum{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.ytp-chip{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:600;letter-spacing:0.3px;color:var(--text2);background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:3px 8px}
+.ytp-chip b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+.ytp-chip.acc{border-color:rgba(229,106,106,0.35);background:rgba(229,106,106,0.1);color:#f0b6b6}
+.ytp-chip.acc b{color:#ffd7d7}
+#ytp-go{width:100%;margin-top:10px;padding:10px;border-radius:9px;border:1px solid rgba(229,106,106,0.55);background:linear-gradient(180deg,#e06a6a,#cb5050);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;letter-spacing:0.2px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 16px rgba(229,106,106,0.2);transition:all .14s var(--ease-out)}
+#ytp-go svg{width:14px;height:14px;flex:none}
+#ytp-go:hover{background:linear-gradient(180deg,#ea7a7a,#d55c5c);box-shadow:0 8px 20px rgba(229,106,106,0.3);transform:translateY(-1px)}
+#ytp-go:active{transform:translateY(0);box-shadow:0 4px 10px rgba(229,106,106,0.22)}
+#ytp-go:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(229,106,106,0.35)}
+.ytp-prog{margin-top:2px}
+.ytp-bar{height:6px;border-radius:3px;background:var(--border2);overflow:hidden}
+.ytp-bar i{display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,#e96a6a,#f0a35c);transition:width .3s var(--ease-out);font-style:normal}
+.ytp-stats{display:flex;justify-content:space-between;gap:6px;font-size:10px;color:var(--text2);margin-top:6px;font-variant-numeric:tabular-nums}
+.ytp-stats b{font-weight:700;color:var(--text)}
+.ytp-label{font-size:10.5px;color:var(--text3);margin-top:5px}
+.ytp-err{font-size:11px;color:#ff9a9a;background:rgba(229,106,106,0.1);border:1px solid rgba(229,106,106,0.3);border-radius:8px;padding:8px 10px;line-height:1.45;word-break:break-word}
+.ytp-done-t{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--green)}
+.ytp-done-t svg{width:14px;height:14px}
+.ytp-file{font-size:10px;color:var(--text3);margin-top:6px;word-break:break-all;line-height:1.45}
+.ytp-acts{display:flex;gap:7px;margin-top:10px}
+.ytp-acts button{flex:1;padding:9px 8px;font-size:11px;font-weight:600;border-radius:9px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;transition:all .12s var(--ease-out)}
+.ytp-acts button:hover{background:var(--border2);color:var(--text);border-color:rgba(255,255,255,0.1)}
+.ytp-acts button:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(66,153,225,0.3)}
+.ytp-acts button.pri{border-color:rgba(229,106,106,0.45);background:rgba(229,106,106,0.14);color:#ffb9b9}
+.ytp-acts button.pri:hover{background:rgba(229,106,106,0.24);color:#fff}
+.ytp-note{font-size:10px;color:var(--text3);margin-top:8px;text-align:center}
+.ytp-note a{color:var(--blue);cursor:pointer;text-decoration:none}
+.ytp-note a:hover{text-decoration:underline}
+.ytp-priv{display:flex;gap:7px;align-items:flex-start;font-size:9.5px;color:var(--text3);margin-top:10px;line-height:1.55}
+.ytp-priv svg{width:11px;height:11px;flex:none;margin-top:2px;opacity:.8}
+
+/* ── Floating state ──
+   Page tabs live in WebContentsViews stacked ABOVE the chrome document, so a
+   popover that only exists here renders underneath the page. While the overlay
+   (yt-overlay.html) mirrors this card we keep the real copy laid out but hidden
+   from paint — it stays the single source of truth for markup, handlers and the
+   test hooks. `.float` is the no-overlay fallback: best effort, chrome-DOM only. */
+#ytp.mirrored{visibility:hidden}
+#ytp.float{z-index:9999}
+#ytp.returning{transition:left .42s var(--ease-out),top .42s var(--ease-out),opacity .3s ease-in .12s}
+
+/* ── Workspace-wide download shelf ──
+   Sits in chrome's own bottom strip: main.js reserves exactly this many pixels
+   (`dl-shelf-reserve`) so the page views shrink with it and the shelf stays
+   visible on every tab, every workspace, for the whole life of each download. */
+#dl-shelf{display:none;flex-shrink:0;flex-direction:column;background:var(--surface);border-top:1px solid var(--border);overflow:hidden;position:relative;z-index:30}
+#dl-shelf.open{display:flex}
+.dls-head{display:flex;align-items:center;gap:8px;height:26px;padding:0 6px 0 11px;flex-shrink:0}
+.dls-t{font-size:9.5px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text2);white-space:nowrap}
+.dls-s{flex:1;min-width:0;font-size:9.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dls-b{width:20px;height:20px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-radius:5px;color:var(--text3);cursor:pointer}
+.dls-b:hover{background:var(--border2);color:var(--text)}
+.dls-b svg{width:11px;height:11px}
+.dls-list{display:flex;flex-direction:column;gap:5px;padding:0 8px 8px;overflow-y:auto;max-height:118px}
+.dls-list::-webkit-scrollbar{width:4px}
+.dls-list::-webkit-scrollbar-track{background:transparent}
+.dls-list::-webkit-scrollbar-thumb{background:var(--border3);border-radius:999px}
+.dli{display:flex;align-items:center;gap:9px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 8px;flex:none}
+.dli-i{width:20px;height:20px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--border2);color:var(--text2)}
+.dli-i svg{width:12px;height:12px}
+.dli.is-active .dli-i{background:rgba(74,139,197,0.14);color:var(--blue)}
+.dli.is-done .dli-i{background:var(--green-bg);color:var(--green)}
+.dli.is-fail .dli-i{background:var(--red-bg);color:var(--red)}
+.dli-m{flex:1;min-width:0}
+.dli-n{font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.dli-n .dli-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dli-ws{font-size:8px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--text3);background:var(--border2);border-radius:999px;padding:1px 5px;flex:none}
+.dli-u{font-size:9.5px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dli-u b{font-weight:700;color:var(--text2)}
+.dli-u.ok{color:var(--green)}
+.dli-u.bad{color:var(--red)}
+.dli-bar{height:3px;border-radius:2px;background:var(--border);overflow:hidden;margin-top:4px}
+.dli-bar i{display:block;height:100%;width:0;border-radius:2px;background:linear-gradient(90deg,#4a8bc5,#7a5db5);transition:width .3s var(--ease-out);font-style:normal}
+.dli.is-done .dli-bar i{background:var(--green)}
+.dli-a{display:flex;gap:4px;flex:none}
+.dli-a button{width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer}
+.dli-a button:hover{background:var(--border2);color:var(--text)}
+.dli-a button svg{width:12px;height:12px}
 </style>
 </head>
 <body>
@@ -419,17 +654,23 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
   </div>
   <div class="tb-group">
     <button class="ib" id="bm-btn" title="Bookmark this page (Ctrl+D)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1l1.5 5H14l-4 3 1.5 5L8 11l-3.5 3L6 9l-4-3h4.5z"/></svg></button>
-    <span id="badge">Ghost Mode</span>
+    <!-- Ghost Mode badge: revealed only for Anonymous (guest) accounts -->
+    <span id="badge" style="display:none">Ghost Mode</span>
     <div id="np" title="Background media playing">
       <span class="np-icon"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 2v9.3A3 3 0 1 0 7 13V5.5l5-1v3.8A3 3 0 1 0 14 9V1z"/></svg></span>
       <span id="np-title"></span>
     </div>
     <button class="ib" id="notes-btn" title="Take notes (Ctrl+Shift+N)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5l3 3L6 13H3v-3z"/><path d="M9 4l3 3"/></svg><span class="nb-lbl">Take notes</span></button>
+    <button class="ib" id="yt-btn" title="Download this video" style="display:none"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5v8M4.5 6L8 9.5 11.5 6"/><path d="M2.5 12v2.5h11V12"/></svg><span class="yt-lbl">Download</span></button>
+    <button class="ib" id="ytpb-btn" title="Download Full Playlist" style="display:none"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h8M2 8h5M2 12h5"/><path d="M11 5.5v5.5M8.5 8.5L11 11l2.5-2.5"/></svg><span class="yt-lbl">Download Full Playlist</span></button>
     <button class="ib" id="hb" title="History (Ctrl+H)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2 2"/></svg></button>
     <button class="ib" id="dl-btn" title="Downloads (Ctrl+J)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v9M4 6l4 4 4-4"/><path d="M2 12v2h12v-2"/></svg><span id="dl-badge">0</span></button>
     <button class="ib" id="db-btn" title="Time Dashboard"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2v12h12"/><path d="M5 10l2-4 2 2 2-5"/><circle cx="12" cy="6" r="1"/></svg></button>
+    <button class="ib" id="cn-btn" title="Connection (IP, country, provider)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4"/><path d="M8 1.8c1.9 2.1 2.9 4.1 2.9 6.2S9.9 12.1 8 14.2C6.1 12.1 5.1 10.1 5.1 8S6.1 3.9 8 1.8z"/></svg></button>
     <button class="ib" id="sb" title="Settings (Ctrl+Comma)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="1.8"/><path d="M8 1.5v1.5M8 13v1.5M3 3l1 1M12 12l1 1M1.5 8H3M13 8h1.5M3 13l1-1M12 4l1-1" stroke-width="1.5"/></svg></button>
     <button class="ib" id="fs-btn" title="Toggle fullscreen (F11)"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M10 3h3v3M3 10v3h3M13 10v3h-3"/></svg></button>
+    <!-- Top-right clock: hidden unless body has class "fs" (AEGIS fullscreen) -->
+    <span id="tb-clock" title="Local time"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.3 1.6"/></svg><span id="tb-clock-t">--:--:--</span></span>
   </div>
 </div>
 <div id="tabs">
@@ -532,6 +773,22 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
     </div>
   </div>
 
+  <!-- Connection Panel (public IP, country, governorate, ISP + speed test) -->
+  <div class="panel" id="cpnl">
+    <div class="phdr"><h3>Connection</h3><div style="display:flex;align-items:center;gap:6px"><button id="cn-refresh" title="Refresh lookup"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89"/><path d="M13.7 2.5v3.2h-3.2"/></svg></button><button id="ccn" title="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div></div>
+    <div class="cn-scroll">
+      <div id="cn-body"></div>
+      <div id="speed-body" hidden></div>
+    </div>
+    <div class="cn-foot">
+      <button id="cn-speed-btn" title="Measure download, upload, latency and jitter">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 11.5a5.5 5.5 0 0 1 11 0"/><path d="M8 11.5l3.2-3.6"/><circle cx="8" cy="11.5" r="1.1"/></svg>
+        <span>Test Internet speed</span>
+      </button>
+      <div id="speed-msg"></div>
+    </div>
+  </div>
+
   <!-- Notes Panel (same side-bar pattern as History, independent section) -->
   <div class="panel" id="notes-panel">
     <div class="phdr"><h3>Notes</h3><div style="display:flex;align-items:center;gap:6px"><span id="notes-ws" style="font-size:7.5px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:var(--radius-pill);letter-spacing:0.5px;text-transform:uppercase;display:none;align-items:center"></span><span id="notes-count" style="font-size:7.5px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:var(--radius-pill);letter-spacing:0.5px;text-transform:uppercase"></span><button id="notes-close" title="Close (Esc)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div></div>
@@ -564,6 +821,27 @@ body::after{content:'';position:fixed;inset:0;z-index:99999;pointer-events:none;
 
 </div>
 <div id="zoom-popup"></div>
+<!-- YouTube download popover — anchored under the toolbar Download button in the
+     chrome document, and mirrored into yt-overlay.html so it floats above pages -->
+<div id="ytp">
+  <div class="ytp-head">
+    <img id="ytp-thumb" alt="" style="display:none">
+    <div class="ytp-meta"><div id="ytp-title"></div><div id="ytp-sub"></div></div>
+    <button id="ytp-x" title="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+  </div>
+  <div id="ytp-body"></div>
+</div>
+<!-- Workspace-wide download shelf — lives above the page views on every tab
+     (main.js reserves its strip), so progress never hides behind a page. -->
+<div id="dl-shelf">
+  <div class="dls-head">
+    <span class="dls-t">Downloads</span>
+    <span class="dls-s" id="dls-sum"></span>
+    <button class="dls-b" id="dls-all" title="Show all downloads (Ctrl+J)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v9M4 6l4 4 4-4"/><path d="M2 12v2h12v-2"/></svg></button>
+    <button class="dls-b" id="dls-x" title="Hide"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+  </div>
+  <div class="dls-list" id="dls-list"></div>
+</div>
 <div id="status"><span id="st"><span class="st-sec"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 3a5 5 0 0 0-8 0M4 8a5 5 0 0 1 8 0"/><path d="M8 5v4M8 11v1"/></svg></span> AEGIS — Private Mode</span><span style="display:flex;align-items:center;gap:8px"><span id="zoom-lbl" title="Reset zoom (Ctrl+0)">100%</span><span id="su"></span></span></div>
 
 <script>
@@ -587,6 +865,14 @@ const hpWs = document.getElementById('hp-ws');
 const sp = document.getElementById('sp');
 const sb = document.getElementById('sb');
 const cs = document.getElementById('cs');
+const cpnl = document.getElementById('cpnl');
+const cnBtn = document.getElementById('cn-btn');
+const cnBody = document.getElementById('cn-body');
+const ccn = document.getElementById('ccn');
+const cnRefresh = document.getElementById('cn-refresh');
+const speedBtn = document.getElementById('cn-speed-btn');
+const speedBody = document.getElementById('speed-body');
+const speedMsg = document.getElementById('speed-msg');
 const gate = document.getElementById('gate');
 const gp = document.getElementById('gp');
 const gm = document.getElementById('gm');
@@ -672,6 +958,8 @@ function render() {
     tabsLeft.style.display = 'flex'; tabsRight.style.display = 'none';
     renderTabsIn(tabsLeft, tlist, null);
   }
+  // The YouTube Download button follows the active tab's URL
+  if (typeof updYtBtn === 'function') updYtBtn();
 }
 
 function setUrl(v, side) {
@@ -680,9 +968,9 @@ function setUrl(v, side) {
 }
 
 function closePanels() {
-  const h = hp.classList.contains('open'), s = sp.classList.contains('open'), d = dlp.classList.contains('open');
-  hp.classList.remove('open'); sp.classList.remove('open'); dlp.classList.remove('open');
-  if (h || s || d) g.panelToggle(false);
+  const h = hp.classList.contains('open'), s = sp.classList.contains('open'), d = dlp.classList.contains('open'), c = cpnl.classList.contains('open');
+  hp.classList.remove('open'); sp.classList.remove('open'); dlp.classList.remove('open'); cpnl.classList.remove('open');
+  if (h || s || d || c) g.panelToggle(false);
   closeNotes();
 }
 
@@ -711,16 +999,186 @@ function refreshHistForContext() {
 
 function toggleH() {
   closeNotes();
-  sp.classList.remove('open');
+  sp.classList.remove('open'); cpnl.classList.remove('open');
   const o = hp.classList.toggle('open'); g.panelToggle(o);
   if (o) { updateHistWsLabel(); hl.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8M12 8v8"/></svg></div><div class="bt">Enter your password</div><div class="bs">to view browsing history</div></div>'; showGate(); }
 }
 
 function toggleS() {
   closeNotes();
-  hp.classList.remove('open');
+  hp.classList.remove('open'); cpnl.classList.remove('open');
   const o = sp.classList.toggle('open'); g.panelToggle(o);
   if (o) loadSett();
+}
+
+// ── Connection panel (public IP, country, governorate, ISP) ──
+// The lookup runs in the main process (see main.js 'get-connection-info'), so
+// the renderer never touches the network itself. Values are rendered escaped.
+let cnLoaded = false;
+
+function cnRenderLoading() {
+  cnBody.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div><div class="bt">Detecting your connection…</div><div class="bs">Asking a geo-IP service for your public address</div></div>';
+}
+
+function cnRow(k, v, sub) {
+  if (!v) return '';
+  return '<div class="cn-row"><span class="cn-k">' + esc(k) + '</span><span class="cn-v">' + esc(v) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span></div>';
+}
+
+function cnRender(d) {
+  if (!d || !d.ok) {
+    cnBody.innerHTML = '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/></svg></div><div class="bt">Could not detect your connection</div><div class="bs">' + esc((d && d.error) || 'Check your internet access, then hit refresh') + '</div></div>';
+    return;
+  }
+  const loc = [d.city, d.region, d.country].filter(Boolean).join(', ');
+  cnBody.innerHTML =
+    '<div class="cn-hero">' +
+      (d.flag ? '<div class="cn-flag">' + d.flag + '</div>' : '') +
+      '<div class="cn-ip"><b>' + esc(d.ip) + '</b><button class="cn-copy" id="cn-copy" title="Copy IP address"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg></button></div>' +
+      (loc ? '<div class="cn-loc">' + esc(loc) + '</div>' : '') +
+    '</div>' +
+    '<div class="cn-rows">' +
+      cnRow('Public IP', d.ip, d.type || '') +
+      cnRow('Country', d.country, d.countryCode || '') +
+      cnRow('Governorate', d.region) +
+      cnRow('City', d.city) +
+      cnRow('Provider (ISP)', d.isp, d.domain || '') +
+      cnRow('Organization', d.org === d.isp ? '' : d.org) +
+      cnRow('ASN', d.asn ? (String(d.asn).indexOf('AS') === 0 ? d.asn : 'AS' + d.asn) : '') +
+      cnRow('Timezone', d.timezone, d.utc ? 'UTC' + d.utc : '') +
+    '</div>' +
+    '<div class="cn-note">Looked up from your public IP via ' + esc(d.source || 'geo-IP service') + ' — only the IP is sent, nothing else leaves AEGIS.</div>';
+  const cb = document.getElementById('cn-copy');
+  if (cb) cb.onclick = async () => {
+    const ok = await g.copyText(d.ip).catch(() => false);
+    if (ok) { cb.classList.add('ok'); setTimeout(() => cb.classList.remove('ok'), 1200); }
+  };
+}
+
+async function loadConn(force) {
+  cnRenderLoading();
+  try { cnRender(await g.getConnectionInfo(force)); cnLoaded = true; }
+  catch (e) { cnRender({ ok: false, error: 'The lookup request failed' }); }
+}
+
+// ── Internet speed test ("Test Internet speed" in the panel footer) ──
+// The measurement runs in the main process (see main.js 'test-internet-speed');
+// this only draws the live progress streamed on 'speed-progress' and the report.
+let speedRunning = false;
+let spTick = null; // elapsed-seconds ticker while the test runs
+
+const SP_TONE = { Excellent: 'ex', 'Very good': 'ex', Good: 'ok', Fair: 'mid', Poor: 'bad', 'Very poor': 'bad' };
+const SP_TINT = {
+  ex: ['var(--green)', 'rgba(72,187,120,0.08)'],
+  ok: ['var(--blue)', 'rgba(74,139,197,0.08)'],
+  mid: ['var(--yellow)', 'rgba(236,201,75,0.08)'],
+  bad: ['var(--red)', 'rgba(229,106,106,0.08)']
+};
+
+function spShowProgress() {
+  speedBody.hidden = false;
+  speedBody.innerHTML =
+    '<div class="sp-hdr"><b>Speed test</b><span>running…</span></div>' +
+    '<div class="sp-prog">' +
+      '<div class="sp-phase"><span id="sp-phase-lbl">Preparing…</span>' +
+        '<em><span id="sp-phase-elapsed">0.0s</span> · <span id="sp-phase-pct">0%</span></em></div>' +
+      '<div class="sp-track"><div class="sp-fill" id="sp-fill"></div></div>' +
+      '<div class="sp-steps"><div class="sp-step" data-ph="ping"></div><div class="sp-step" data-ph="download"></div><div class="sp-step" data-ph="upload"></div></div>' +
+      '<div class="sp-live" id="sp-live">Contacting a test server…</div>' +
+    '</div>';
+  // Seconds since the press, so a quiet start never reads as a frozen bar.
+  // It clears itself as soon as the report replaces this markup.
+  const t0 = Date.now();
+  if (spTick) clearInterval(spTick);
+  spTick = setInterval(() => {
+    const el = document.getElementById('sp-phase-elapsed');
+    if (!el) { clearInterval(spTick); spTick = null; return; }
+    el.textContent = ((Date.now() - t0) / 1000).toFixed(1) + 's';
+  }, 100);
+  try { speedBody.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+}
+
+function spProgress(p) {
+  const fill = document.getElementById('sp-fill');
+  if (!fill || !p) return;
+  const pct = Math.max(0, Math.min(100, p.pct || 0));
+  fill.style.width = pct + '%';
+  const lbl = document.getElementById('sp-phase-lbl'); if (lbl && p.label) lbl.textContent = p.label;
+  const pctEl = document.getElementById('sp-phase-pct'); if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+  const live = document.getElementById('sp-live'); if (live && p.live != null) live.textContent = p.live;
+  const order = ['ping', 'download', 'upload'];
+  const at = order.indexOf(p.phase);
+  if (at >= 0) speedBody.querySelectorAll('.sp-step').forEach((s, i) => s.classList.toggle('on', i <= at));
+}
+
+function spNum(v, dp) { return v == null ? '—' : (dp === 0 ? Math.round(v) : Number(v).toFixed(dp)); }
+
+function spRender(d) {
+  speedBody.hidden = false;
+  const tone = SP_TONE[d.rating] || 'ok';
+  const rgb = SP_TINT[tone] || SP_TINT.ok;
+  const dp = d.download != null && d.download >= 100 ? 0 : 1;
+  const tile = (k, v, u, sub) =>
+    '<div class="sp-tile' + (v == null || v === '—' ? ' miss' : '') + '"><div class="k">' + esc(k) + '</div>' +
+    '<div class="v">' + (v == null ? '—' : esc(v)) + '</div><div class="u">' + esc(u) + '</div>' +
+    (sub ? '<div class="s">' + esc(sub) + '</div>' : '') + '</div>';
+  speedBody.innerHTML =
+    '<div class="sp-hdr"><b>Speed test</b><span>just now</span></div>' +
+    '<div class="sp-score" style="--sc:' + rgb[0] + ';--sc-tint:' + rgb[1] + '">' +
+      '<div class="sp-num">' + esc(d.score) + '<small>/100</small></div>' +
+      '<div class="sp-badge" style="background:' + rgb[1] + ';color:' + rgb[0] + '">' + esc(d.rating) + '</div>' +
+      '<div class="sp-verdict">' + esc(d.verdict) + '</div>' +
+    '</div>' +
+    '<div class="sp-grid">' +
+      tile('Download', spNum(d.download, dp), 'Mbps') +
+      tile('Upload', spNum(d.upload, d.upload != null && d.upload >= 100 ? 0 : 1), 'Mbps') +
+      tile('Ping', spNum(d.ping, 0), 'ms', d.jitter != null ? 'jitter ' + Math.round(d.jitter) + ' ms' : '') +
+    '</div>' +
+    '<div class="sp-uses">' +
+      (d.uses || []).map(u => '<div class="sp-use"><span>' + esc(u.name) + '</span><i class="sp-t-' + esc(u.state) + '">' + esc(u.label) + '</i></div>').join('') +
+    '</div>' +
+    (d.tips && d.tips.length
+      ? '<div class="sp-tips"><b>What it means for you</b>' + d.tips.map(t => '<div>' + esc(t) + '</div>').join('') + '</div>'
+      : '') +
+    '<div class="cn-note">Measured against ' + esc(d.server || 'a public test server') +
+      ' — a few dummy test files are transferred, nothing about you or your browsing leaves AEGIS.</div>';
+  try { speedBody.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+}
+
+function spRenderError(d) {
+  speedBody.hidden = false;
+  speedBody.innerHTML =
+    '<div class="sp-hdr"><b>Speed test</b><span>failed</span></div>' +
+    '<div class="he"><div class="bi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/></svg></div>' +
+    '<div class="bt">Speed test could not run</div><div class="bs">' + esc((d && d.error) || 'Check your internet access, then try again') + '</div></div>';
+  try { speedBody.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+}
+
+g.onSpeedProgress((p) => { if (speedRunning) spProgress(p); });
+
+speedBtn.onclick = async () => {
+  if (speedRunning) return;
+  speedRunning = true;
+  speedBtn.disabled = true;
+  speedBtn.querySelector('span').textContent = 'Testing…';
+  speedMsg.textContent = 'Measuring latency, download and upload — usually 10–25 seconds';
+  spShowProgress();
+  try {
+    const d = await g.testInternetSpeed();
+    if (d && d.ok) { spRender(d); speedMsg.textContent = 'Tested via ' + (d.server || 'a public server') + ' — press again to re-test'; }
+    else { spRenderError(d); speedMsg.textContent = ''; }
+  } catch (e) { spRenderError({ error: 'The speed test request failed' }); speedMsg.textContent = ''; }
+  speedRunning = false;
+  speedBtn.disabled = false;
+  speedBtn.querySelector('span').textContent = 'Test Internet speed';
+  if (spTick) { clearInterval(spTick); spTick = null; }
+};
+
+function toggleCn() {
+  closeNotes();
+  hp.classList.remove('open'); sp.classList.remove('open'); dlp.classList.remove('open');
+  const o = cpnl.classList.toggle('open'); g.panelToggle(o);
+  if (o) loadConn(!cnLoaded); // first open: fetch; later opens: cached unless refreshed
 }
 
 function loadSett() {
@@ -731,6 +1189,15 @@ function loadSett() {
     });
   } catch(e) {}
 }
+
+// Ghost Mode badge: visible ONLY in Anonymous (guest) mode. The badge starts
+// hidden in the markup, so a regular account (or an unknown one) never sees it.
+try {
+  g.getUser().then((u) => {
+    const b = document.getElementById('badge');
+    if (b) b.style.display = (u && u.guest) ? '' : 'none';
+  }).catch(() => {});
+} catch (e) {}
 
 function showGate() { gate.classList.add('open'); gp.value = ''; gm.textContent = ''; gp.focus(); }
 function hideGate() { gate.classList.remove('open'); }
@@ -895,18 +1362,74 @@ g.onTabsList((d) => {
 g.onStatusUrl((u) => { surl.textContent = u || ''; });
 g.onShowHistory(() => toggleH());
 
+// ── Floating suggestion overlay ──
+// Whichever bar is open owns the overlay view (main.js 'suggest-overlay'); item
+// clicks inside it round-trip back through 'suggest-picked' → pick() below.
+let suggestOverlayCtl = null; // { el, sync, pick } of the bar using the overlay
+let suggestOverlayToken = 0;  // invalidates in-flight opens after a close
+
+function hideSuggestOverlay() {
+  if (!suggestOverlayCtl) return;
+  suggestOverlayCtl = null;
+  suggestOverlayToken++;
+  try { if (g && g.suggestOverlay) g.suggestOverlay({ open: false }); } catch (e) {}
+}
+
+if (g && g.onSuggestPicked) g.onSuggestPicked((idx) => {
+  if (suggestOverlayCtl && suggestOverlayCtl.pick) suggestOverlayCtl.pick(idx);
+});
+
 // ── URL Bar Factory for Dual Suggestions ──
 function makeURLBar(inputEl, suggestEl, navFn) {
   let suggestIdx = -1;
   let suggestData = [];
   let debounceTimer = null;
+  let suggestOverlayRetry = 0; // failed overlay opens before we give up (hide)
 
   function closeSuggest() {
-    suggestEl.classList.remove('open');
+    suggestEl.classList.remove('open', 'vis', 'fb');
     suggestEl.innerHTML = '';
     suggestIdx = -1;
     suggestData = [];
+    suggestOverlayRetry = 0;
+    if (suggestOverlayCtl && suggestOverlayCtl.el === suggestEl) hideSuggestOverlay();
     if (g && g.suggestToggle) g.suggestToggle(false, 0);
+  }
+
+  const accent = suggestEl.id === 'suggest-right' ? 'purple' : 'blue';
+
+  // Hand the current suggestions to the floating overlay view — NO page push:
+  // the dropdown layers above the page instead of shoving it down. Re-sent on
+  // every fetch, selection change and window resize so position/selection stay
+  // pixel-exact. There is intentionally NO layout-push fallback: if the overlay
+  // can't open, we retry a couple of times and then stay hidden — the menu
+  // must never take space in (or push) the page.
+  async function syncOverlay() {
+    const token = ++suggestOverlayToken;
+    suggestOverlayCtl = { el: suggestEl, sync: syncOverlay, pick: (idx) => { if (suggestData[idx]) navigateTo(suggestData[idx], true); } };
+    const wr = suggestEl.parentElement.getBoundingClientRect();
+    const h = suggestEl.offsetHeight || (suggestData.length * 33 + 12);
+    let ok = false;
+    try {
+      ok = await g.suggestOverlay({ open: true, rect: { x: wr.left, y: wr.bottom, width: wr.width }, height: h, items: suggestData, sel: suggestIdx, accent });
+    } catch (e) { ok = false; }
+    if (token !== suggestOverlayToken) return; // closed (or re-synced) while in flight
+    if (ok) {
+      suggestOverlayRetry = 0;
+      suggestEl.classList.remove('vis', 'fb');
+    } else if (suggestOverlayCtl && suggestOverlayCtl.el === suggestEl) {
+      // Overlay not ready yet (first open still loading, or transient failure):
+      // wait and retry — NEVER push the page down as a fallback.
+      if (suggestOverlayRetry < 2) {
+        suggestOverlayRetry++;
+        setTimeout(() => { if (token === suggestOverlayToken) syncOverlay(); }, 350);
+      }
+    }
+  }
+
+  // Arrow-key selection changed: mirror it into the overlay highlight.
+  function syncSelOverlay() {
+    if (suggestOverlayCtl && suggestOverlayCtl.el === suggestEl) syncOverlay();
   }
 
   function navigateTo(val, isSuggestion) {
@@ -950,12 +1473,9 @@ function makeURLBar(inputEl, suggestEl, navFn) {
       ).join('');
       suggestEl.classList.add('open');
       suggestIdx = -1;
-      // Use real DOM height so the native WebContentsView gap aligns exactly
-      // with the dropdown (no black gap, no overlap).
-      requestAnimationFrame(() => {
-        const realHeight = suggestEl.offsetHeight || (suggestData.length * 33 + 12);
-        if (g && g.suggestToggle) g.suggestToggle(true, realHeight + 8);
-      });
+      // Measure synchronously (forced reflow) and hand off to the floating
+      // overlay view — the page below never moves.
+      syncOverlay();
     } catch(e) { closeSuggest(); }
   }
 
@@ -984,17 +1504,20 @@ function makeURLBar(inputEl, suggestEl, navFn) {
       suggestIdx = Math.min(suggestIdx + 1, items.length - 1);
       items.forEach((el, i) => el.classList.toggle('sel', i === suggestIdx));
       if (suggestData[suggestIdx]) inputEl.value = suggestData[suggestIdx];
+      syncSelOverlay();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (!items.length) return;
       if (suggestIdx <= 0) {
         suggestIdx = -1;
         items.forEach(el => el.classList.remove('sel'));
+        syncSelOverlay();
         return;
       }
       suggestIdx = Math.max(suggestIdx - 1, 0);
       items.forEach((el, i) => el.classList.toggle('sel', i === suggestIdx));
       if (suggestData[suggestIdx]) inputEl.value = suggestData[suggestIdx];
+      syncSelOverlay();
     } else if (e.key === 'Escape') {
       closeSuggest();
     }
@@ -1047,11 +1570,11 @@ const rightBar = makeURLBar(urlR, document.getElementById('suggest-right'), (v) 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#url-bar-wrap-left')) {
     const s = document.getElementById('suggest');
-    if (s.classList.contains('open')) { s.classList.remove('open'); if (g.suggestToggle) g.suggestToggle(false, 0); }
+    if (s.classList.contains('open')) { s.classList.remove('open', 'vis', 'fb'); if (suggestOverlayCtl && suggestOverlayCtl.el === s) hideSuggestOverlay(); if (g.suggestToggle) g.suggestToggle(false, 0); }
   }
   if (!e.target.closest('#url-bar-wrap-right')) {
     const s = document.getElementById('suggest-right');
-    if (s.classList.contains('open')) { s.classList.remove('open'); if (g.suggestToggle) g.suggestToggle(false, 0); }
+    if (s.classList.contains('open')) { s.classList.remove('open', 'vis', 'fb'); if (suggestOverlayCtl && suggestOverlayCtl.el === s) hideSuggestOverlay(); if (g.suggestToggle) g.suggestToggle(false, 0); }
   }
 });
 back.onclick = () => { if (splitActive && splitLeftId) g.goBackWorkspace(splitLeftId); else g.goBack(); };
@@ -1071,6 +1594,9 @@ hclear.onclick = async () => {
 };
 sb.onclick = toggleS;
 cs.onclick = () => { sp.classList.remove('open'); g.panelToggle(false); };
+cnBtn.onclick = toggleCn;
+ccn.onclick = () => { cpnl.classList.remove('open'); g.panelToggle(false); };
+cnRefresh.onclick = () => loadConn(true);
 document.getElementById('fs-btn').onclick = () => g.toggleFullscreen();
 document.getElementById('db-btn').onclick = () => {
   g.saveTabs();
@@ -1179,7 +1705,13 @@ document.addEventListener('keydown', (e) => {
 });
 // Also handle F5 as reload
 document.addEventListener('keyup', (e) => { if (e.key === 'F5') e.preventDefault(); });
-window.addEventListener('resize', () => g.resizeContent());
+let overlayResizeT = null;
+window.addEventListener('resize', () => {
+  g.resizeContent();
+  // Keep the floating dropdown glued to the search bar across resizes
+  clearTimeout(overlayResizeT);
+  overlayResizeT = setTimeout(() => { if (suggestOverlayCtl && suggestOverlayCtl.sync) suggestOverlayCtl.sync(); }, 80);
+});
 
 // ── Downloads (per-workspace) ──
 const dlBtn = document.getElementById('dl-btn');
@@ -1230,7 +1762,7 @@ dlClear.onclick = () => {
 
 function toggleDl() {
   closeNotes();
-  hp.classList.remove('open'); sp.classList.remove('open');
+  hp.classList.remove('open'); sp.classList.remove('open'); cpnl.classList.remove('open');
   const o = dlp.classList.toggle('open'); g.panelToggle(o);
   if (o) {
     const wsEl = document.getElementById('dlp-ws');
@@ -1463,6 +1995,209 @@ function renderDl(loading) {
   });
 }
 
+// ── Workspace-wide download shelf ──
+// One store for every workspace, fed by the shared 'download-progress' stream
+// (which main broadcasts globally) and seeded from getAllDownloads(). Nothing
+// here is keyed by tab or by the active workspace: switching tabs or workspaces
+// never restarts, duplicates or re-renders a download — the same job ids simply
+// keep reporting until they reach a terminal state.
+const dlShelf = document.getElementById('dl-shelf');
+const dlsList = document.getElementById('dls-list');
+const dlsSum = document.getElementById('dls-sum');
+const shelfEls = new Map();   // download id -> card element (reused, never rebuilt)
+const shelfBy = new Map();    // download id -> latest payload
+const SHELF_DONE_TTL = 12000; // how long a finished download stays on screen
+let shelfHide = false;        // user pressed Hide: only a NEW download reopens it
+let shelfRaf = 0;
+let shelfReservePx = -1;
+let shelfWakeT = null;
+
+const DLS_ICONS = {
+  active: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M3 13h10"/></svg>',
+  done: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg>',
+  canceled: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+  failed: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 10.8v.4"/></svg>',
+};
+
+function shelfDeleted(d) {
+  if (!d) return false;
+  if (deletedDlSet.has(d.id)) return true;
+  if (typeof d.id === 'number' && deletedDlSet.has('hist_' + d.id)) return true;
+  if (typeof d.id === 'string' && d.id.startsWith('hist_')) {
+    const n = parseInt(d.id.slice(5), 10);
+    if (!isNaN(n) && deletedDlSet.has(n)) return true;
+  }
+  if (d.savePath && (deletedDlSet.has(d.savePath) || deletedDlSet.has(d.savePath.replace(/\\/g, '/')))) return true;
+  return false;
+}
+
+function shelfPct(d) {
+  if (!d || !(d.total > 0)) return 0;
+  return Math.max(0, Math.min(100, Math.round((d.received / d.total) * 100)));
+}
+
+// Terminal states first — this is what the shelf is for.
+function shelfState(d) {
+  if (d.done && d.success) return { cls: 'is-done', icon: DLS_ICONS.done, u: ' ok',
+    line: '<b>Completed</b> · ' + formatBytes(d.total || d.received) };
+  if (d.done && d.canceled) return { cls: '', icon: DLS_ICONS.canceled, u: '',
+    line: '<b>Canceled</b>' + (d.received ? ' · ' + formatBytes(d.received) : '') };
+  if (d.done) return { cls: 'is-fail', icon: DLS_ICONS.failed, u: ' bad', line: '<b>Failed</b>' };
+  if (d.received > 0) {
+    // Some downloads report no total up front (YouTube, chunked servers): show
+    // the byte count rather than a fabricated 0%.
+    const size = formatBytes(d.received) + (d.total > 0 ? ' of ' + formatBytes(d.total) : '');
+    return { cls: 'is-active', icon: DLS_ICONS.active, u: '',
+      line: (d.total > 0 ? '<b>' + shelfPct(d) + '%</b> · ' : '<b>Downloading</b> · ')
+          + formatBytes(d.speed || 0) + '/s · ' + size };
+  }
+  return { cls: 'is-active', icon: DLS_ICONS.active, u: '', line: '<b>Pending</b> · waiting for data' };
+}
+
+function shelfEnsureCard(d) {
+  const key = String(d.id);
+  let el = shelfEls.get(key);
+  if (el) return el;
+  el = document.createElement('div');
+  el.className = 'dli';
+  el.dataset.k = key;
+  el.innerHTML = '<div class="dli-i"></div>'
+    + '<div class="dli-m"><div class="dli-n"><span class="dli-name"></span><span class="dli-ws" style="display:none"></span></div>'
+    + '<div class="dli-u"></div>'
+    + '<div class="dli-bar"><i style="width:0%"></i></div></div>'
+    + '<div class="dli-a"><button data-act="folder" title="Show in folder" style="display:none">'
+    + '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12V4.5A1.5 1.5 0 0 1 3.5 3H6l1.5 2H12a1.5 1.5 0 0 1 1.5 1.5V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg>'
+    + '</button></div>';
+  el.$i = el.querySelector('.dli-i');
+  el.$n = el.querySelector('.dli-name');
+  el.$w = el.querySelector('.dli-ws');
+  el.$u = el.querySelector('.dli-u');
+  el.$f = el.querySelector('.dli-bar i');
+  el.$a = el.querySelector('.dli-a button');
+  shelfEls.set(key, el);
+  return el;
+}
+
+// Only the fields that actually changed touch the DOM: progress repaints this
+// strip several times a second and must not rebuild nodes (or lose transitions).
+function shelfPaintCard(el, d) {
+  const st = shelfState(d);
+  if (el._cls !== st.cls) {
+    el._cls = st.cls;
+    el.className = 'dli' + (st.cls ? ' ' + st.cls : '');
+    el.$i.innerHTML = st.icon;
+  }
+  const name = d.name || 'Download';
+  if (el._name !== name) { el._name = name; el.$n.textContent = name; }
+  const ws = (d.ws && d.ws !== 'default') ? String(d.ws).substring(0, 8) : '';
+  if (el._ws !== ws) { el._ws = ws; el.$w.textContent = ws; el.$w.style.display = ws ? '' : 'none'; }
+  const line = st.line;
+  if (el._line !== line) {
+    el._line = line;
+    el.$u.innerHTML = line;
+    el.$u.className = 'dli-u' + st.u;
+    el.$u.title = d.savePath || '';
+  }
+  const w = (d.done ? 100 : shelfPct(d)) + '%';
+  if (el._w !== w) { el._w = w; el.$f.style.width = w; }
+  const folder = !!(d.done && d.savePath);
+  if (el._folder !== folder) { el._folder = folder; el.$a.style.display = folder ? '' : 'none'; }
+  if (folder && el._path !== d.savePath) { el._path = d.savePath; el.title = d.savePath; }
+}
+
+function shelfSyncReserve() {
+  const h = dlShelf.classList.contains('open') ? Math.ceil(dlShelf.getBoundingClientRect().height) : 0;
+  if (h === shelfReservePx) return;
+  shelfReservePx = h;
+  try { g.dlShelfReserve(h); } catch (e) {}
+}
+
+function shelfWake() {
+  clearTimeout(shelfWakeT);
+  const now = Date.now();
+  let when = 0;
+  for (const d of shelfBy.values()) {
+    if (!d.done || d._doneAt == null) continue;
+    const t = d._doneAt + SHELF_DONE_TTL;
+    if (t > now && (!when || t < when)) when = t;
+  }
+  if (when) shelfWakeT = setTimeout(scheduleShelf, when - now + 40);
+}
+
+function shelfDropCard(k) {
+  const el = shelfEls.get(k);
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  shelfEls.delete(k);
+}
+
+function renderShelf() {
+  const now = Date.now();
+  for (const [k, v] of Array.from(shelfBy)) {
+    if (shelfDeleted(v)) { shelfBy.delete(k); shelfDropCard(k); continue; }
+    if (v.done) {
+      if (v._doneAt == null) v._doneAt = now;
+      else if (now - v._doneAt > SHELF_DONE_TTL) { shelfBy.delete(k); shelfDropCard(k); continue; }
+    }
+  }
+  const items = Array.from(shelfBy.values()).sort((a, b) => (b.start || 0) - (a.start || 0));
+  const active = items.filter(d => !d.done).length;
+  const grace = items.some(d => d.done && d._doneAt != null && now - d._doneAt <= SHELF_DONE_TTL);
+  const show = !shelfHide && items.length > 0 && (active > 0 || grace);
+
+  dlShelf.classList.toggle('open', show);
+  if (!show) {
+    if (dlsList.childElementCount) dlsList.innerHTML = '';
+    shelfSyncReserve();
+    return;
+  }
+  dlsSum.textContent = active
+    ? active + ' active · ' + (items.length - active) + ' finished'
+    : items.length + ' finished';
+
+  const order = items.map(shelfEnsureCard);
+  const cur = Array.from(dlsList.children);
+  if (cur.length !== order.length || cur.some((c, i) => c !== order[i])) {
+    order.forEach((el) => dlsList.appendChild(el));
+  }
+  for (let i = 0; i < order.length; i++) shelfPaintCard(order[i], items[i]);
+  shelfSyncReserve();
+  shelfWake();
+}
+
+function scheduleShelf() {
+  if (shelfRaf) return;
+  shelfRaf = requestAnimationFrame(() => { shelfRaf = 0; renderShelf(); });
+}
+
+function shelfUpd(d) {
+  if (!d || d.id == null) return;
+  if (shelfDeleted(d)) return;
+  const fresh = !shelfBy.has(d.id);
+  shelfBy.set(d.id, Object.assign({}, shelfBy.get(d.id) || {}, d));
+  if (fresh) shelfHide = false; // a brand-new download always reopens the shelf
+  scheduleShelf();
+}
+
+dlsList.addEventListener('click', (e) => {
+  const card = e.target.closest('.dli');
+  if (!card) return;
+  const d = shelfBy.get(card.dataset.k);
+  if (!d || !d.savePath) return;
+  const btn = e.target.closest('button[data-act="folder"]');
+  if (btn) { e.stopPropagation(); g.openDownloadFolder(d.savePath); return; }
+  if (d.done) g.openDownloadFolder(d.savePath);
+});
+document.getElementById('dls-x').onclick = () => { shelfHide = true; scheduleShelf(); };
+document.getElementById('dls-all').onclick = () => { if (!dlp.classList.contains('open')) toggleDl(); };
+
+g.onDownloadProgress(shelfUpd);
+// Seed from every workspace's live jobs so a download started before this page
+// (or in another workspace) is on screen immediately — active ones only.
+g.getAllDownloads().then((list) => { (list || []).forEach((d) => { if (d && !d.done) shelfUpd(d); }); }).catch(() => {});
+g.onDownloadsCleared(() => { shelfBy.clear(); shelfEls.clear(); shelfHide = false; clearTimeout(shelfWakeT); scheduleShelf(); });
+window.addEventListener('resize', () => { shelfSyncReserve(); });
+
+
 // ── Split View ──
 const splitBar = document.getElementById('split-bar');
 const splLeft = document.getElementById('spl-left');
@@ -1502,7 +2237,27 @@ async function refreshDl() {
   } catch(e) {}
 }
 
-g.onFullscreenChange((fs) => { document.body.classList.toggle('fs', fs); setTimeout(() => g.resizeContent(), 100); });
+// ── Fullscreen clock ──
+// The clock sits in the top-right toolbar and is rendered by CSS only while
+// body.fs is set, so it exists (and ticks) strictly in fullscreen mode.
+const tbClockT = document.getElementById('tb-clock-t');
+let tbClockTimer = null;
+function tbClockTick() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  tbClockT.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+function setFsClock(on) {
+  if (on) {
+    tbClockTick(); // paint immediately so it never shows a stale "--:--:--"
+    if (!tbClockTimer) tbClockTimer = setInterval(tbClockTick, 1000);
+  } else if (tbClockTimer) {
+    clearInterval(tbClockTimer);
+    tbClockTimer = null;
+  }
+}
+
+g.onFullscreenChange((fs) => { document.body.classList.toggle('fs', fs); setFsClock(fs); setTimeout(() => g.resizeContent(), 100); });
 
 g.onSplitChanged(async (d) => {
   splitActive = d.active;
@@ -1553,7 +2308,9 @@ g.onSplitChanged(async (d) => {
     document.getElementById('url-bar-wrap-right').classList.remove('open');
     urlSplitLabel.classList.remove('open');
     splitHandle.classList.remove('open');
-    document.getElementById('suggest-right').classList.remove('open');
+    const sugR = document.getElementById('suggest-right');
+    sugR.classList.remove('open', 'vis', 'fb');
+    if (suggestOverlayCtl && suggestOverlayCtl.el === sugR) hideSuggestOverlay();
     if (g.suggestToggle) g.suggestToggle(false, 0);
     refreshDl();
     render();
@@ -1582,6 +2339,7 @@ document.addEventListener('mousemove', (e) => {
   const x = e.clientX - rect.left;
   // The right side may be reserved for a side bar (notes/history/downloads/settings) — split only the page area
   const sideBarOpen = hp.classList.contains('open') || sp.classList.contains('open') || dlp.classList.contains('open')
+    || cpnl.classList.contains('open')
     || document.getElementById('notes-panel').classList.contains('open');
   const pageW = Math.max(200, rect.width - (sideBarOpen ? 400 : 0));
   const ratio = Math.max(0.15, Math.min(0.85, x / pageW));
@@ -1597,7 +2355,11 @@ document.addEventListener('mouseup', () => {
 });
 
 g.onWorkspaceSwitched((d) => {
+  if (d && d.id) curWsId = d.id;
   badgeLeft.textContent = d.name;
+  // Nothing can be bookmarked in the Ghost Workspace (it saves nothing), so
+  // the star would be a dead control there.
+  bmBtn.style.display = (d && d.id === 'ghost') ? 'none' : '';
   refreshHistForContext();
   refreshNotesForContext();
 });
@@ -1614,43 +2376,56 @@ g.onReturnToWorkspaces(async () => {
 zoomLbl.onclick = () => { g.zoomReset(); };
 
 // ── Background Media Indicator ──
+// The pill shows whatever is playing in ANY workspace. Clicking it takes you
+// there: switch to that workspace first (which also leaves split view), then
+// bring the playing tab to the front.
 const npEl = document.getElementById('np');
 const npTitle = document.getElementById('np-title');
 
-g.onMediaState((d) => {
-  if (d.playing && d.tabs.length > 0) {
+let curWsId = null; // workspace the browser is currently showing
+g.getActiveWorkspace().then(w => { if (w) curWsId = w.id; }).catch(() => {});
+
+function paintMediaPill(d) {
+  if (d && d.playing && d.tabs && d.tabs.length > 0) {
     npTitle.textContent = d.tabs[0].title || 'Playing audio';
     npEl.style.display = 'flex';
   } else {
     npEl.style.display = 'none';
   }
-});
+}
 
-g.getMediaState().then(d => {
-  if (d.playing && d.tabs.length > 0) {
-    npTitle.textContent = d.tabs[0].title || 'Playing audio';
-    npEl.style.display = 'flex';
-  }
-});
+g.onMediaState(paintMediaPill);
+g.getMediaState().then(paintMediaPill);
 
-npEl.onclick = () => {
-  g.getMediaState().then(d => {
-    if (d.tabs && d.tabs.length > 0) {
-      const tab = d.tabs[0];
-      if (splitActive && tab.workspaceId) {
-        if (tab.workspaceId === splitRightId) {
-          g.focusSplitPane('right');
-          g.activateTabWorkspace(splitRightId, tab.id);
-        } else {
-          g.focusSplitPane('left');
-          g.activateTabWorkspace(splitLeftId, tab.id);
-        }
-      } else {
-        const t = tlist.find(x => x.id === tab.id);
-        if (t) g.activateTab(tab.id);
-      }
+npEl.onclick = async () => {
+  try {
+    const d = await g.getMediaState();
+    if (!d || !d.tabs || d.tabs.length === 0) return;
+    const paneOf = (ws) => (splitActive && ws && (ws === splitRightId || ws === splitLeftId));
+    // Prefer media already on screen (current workspace or a split pane),
+    // otherwise the first one playing anywhere.
+    const tab = d.tabs.find(t => t.workspaceId && (t.workspaceId === curWsId || paneOf(t.workspaceId)))
+             || d.tabs.find(t => t.workspaceId)
+             || d.tabs[0];
+    const wsId = tab.workspaceId || null;
+
+    // Already visible in a split pane → focus that pane + the tab.
+    if (paneOf(wsId)) {
+      g.focusSplitPane(wsId === splitRightId ? 'right' : 'left');
+      g.activateTabWorkspace(wsId, tab.id);
+      return;
     }
-  });
+
+    // Playing in another workspace → move there first, then focus the tab.
+    if (wsId && wsId !== curWsId) {
+      const r = await g.switchWorkspace(wsId);
+      if (!r || r.ok === false) return;
+      curWsId = wsId;
+    }
+    if (wsId) g.activateTab(tab.id);
+    // No workspace recorded → only activate when it is already in view here.
+    else if (tlist.some(x => x.id === tab.id)) g.activateTab(tab.id);
+  } catch (e) {}
 };
 
 g.getTabs().then(async raw => {
@@ -1668,6 +2443,7 @@ g.getTabs().then(async raw => {
   try {
     const w = await g.getActiveWorkspace();
     if (w) badgeLeft.textContent = w.name;
+    bmBtn.style.display = (w && w.id === 'ghost') ? 'none' : '';
   } catch(e) {}
 });
 
@@ -1747,7 +2523,7 @@ ngp.addEventListener('keydown', (e) => { if (e.key === 'Enter') ngok.click(); })
 
 function openNotes() {
   // Only one side bar at a time (same rule as History / Downloads / Settings)
-  hp.classList.remove('open'); sp.classList.remove('open'); dlp.classList.remove('open');
+  hp.classList.remove('open'); sp.classList.remove('open'); dlp.classList.remove('open'); cpnl.classList.remove('open');
   notesOpen = true;
   notesUnlocked = false;
   notesBtn.classList.add('active');
@@ -1873,6 +2649,621 @@ noteInput.addEventListener('keydown', (e) => {
 // Ctrl+Shift+N toggles the notes side bar
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); toggleNotes(); }
+});
+
+// ── YouTube download: toolbar button + quality popover ──
+// The button only shows while a YouTube page is open. Opening it probes the
+// video's available qualities (1080p preselected) and starting a download
+// streams progress events back from the main process (yt-dlp runs there).
+const ytBtn = document.getElementById('yt-btn');
+const ytpEl = document.getElementById('ytp');
+const ytpThumb = document.getElementById('ytp-thumb');
+const ytpTitleEl = document.getElementById('ytp-title');
+const ytpSubEl = document.getElementById('ytp-sub');
+const ytpBody = document.getElementById('ytp-body');
+const ytpCloseBtn = document.getElementById('ytp-x');
+
+let ytpOpen = false;
+let ytpInfo = null;        // last successful probe
+let ytpInfoUrl = null;     // the URL ytpInfo belongs to
+let ytpSeenUrl = null;     // last URL the popover logic reacted to
+let ytpSel = null;         // selected height
+let ytpPhase = 'idle';     // idle | loading | ready | working | done | error
+let ytpSetupLabel = '';    // tool-provisioning progress text
+let ytpPct = 0, ytpSpeed = 0, ytpEta = '', ytpWorkLabel = '';
+let ytpDoneInfo = null;    // { savePath, name, size }
+let ytpErrMsg = '';
+let ytpBusy = false;       // a download invoke is pending
+let ytpJobId = null;       // id of the download job this popover owns (multi-job)
+let ytpDir = '';           // destination folder (from main; shown in the folder row)
+let ytpPicking = false;    // the native folder dialog is open (suspends the 5s return)
+
+function isYouTubeUrl(u) {
+  try {
+    const x = new URL(String(u || ''));
+    if (!/^https?:$/.test(x.protocol)) return false;
+    const h = x.hostname.replace(/^www\./i, '').toLowerCase();
+    return h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtu.be'
+        || h === 'youtube-nocookie.com' || h.endsWith('.youtube-nocookie.com');
+  } catch (e) { return false; }
+}
+
+function ytActiveUrl() {
+  const t = tlist.find(x => x.id === active);
+  return (t && t.url) || '';
+}
+
+// A COMPLETE YouTube playlist page (youtube.com/playlist?list=…) — the only
+// place the "Download Full Playlist" button may appear. Ordinary video pages
+// (watch?v=…), channel pages and unrelated sites never match, mirroring
+// ytPlaylistListId() in main.js.
+function isYouTubePlaylistUrl(u) {
+  try {
+    const x = new URL(String(u || ''));
+    if (!/^https?:$/.test(x.protocol)) return false;
+    const h = x.hostname.replace(/^www\./i, '').toLowerCase();
+    if (h !== 'youtube.com' && !h.endsWith('.youtube.com')) return false;
+    if (x.pathname.replace(/\/+$/, '') !== '/playlist') return false;
+    return !!(x.searchParams.get('list') || '').trim();
+  } catch (e) { return false; }
+}
+
+function updYtBtn() {
+  // Self-contained and defensive: render() can run before this block's
+  // top-level consts/lets initialize (TDZ), so look everything up live and
+  // ignore the call until this block has finished executing once.
+  try {
+    const b = document.getElementById('yt-btn');
+    if (!b) return;
+    const u = ytActiveUrl();
+    const onPlaylist = isYouTubePlaylistUrl(u);
+    // The single-video Download button cannot do anything on a playlist page
+    // (there is no single video id there), so the two never show together:
+    // video page → Download, playlist page → Download Full Playlist.
+    const show = isYouTubeUrl(u) && !onPlaylist;
+    b.style.display = show ? 'flex' : 'none';
+    const pb = document.getElementById('ytpb-btn');
+    if (pb) pb.style.display = onPlaylist ? 'flex' : 'none';
+    ytpInvalidate(); // navigating between videos must not keep stale qualities
+    // Never drop the menu because of a transient URL read while a download is
+    // running: this popover owns that download's progress and its Cancel button.
+    if (!show && ytpOpen && ytpPhase !== 'working' && !ytpBusy) ytpSetOpen(false);
+  } catch (e) { /* still initializing */ }
+}
+
+function ytpAnchorRect() {
+  const r = ytBtn.getBoundingClientRect();
+  const w = Math.round(ytpEl.offsetWidth || 340);
+  const h = Math.round(ytpEl.offsetHeight || 200);
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+  // The card is tall (~500px): never let it hang off the bottom of the window.
+  const y = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - h - 8));
+  return { x: Math.round(left), y: Math.round(y), w: w, h: h };
+}
+
+function ytpAnchor() {
+  const a = ytpAnchorRect();
+  ytpEl.style.left = a.x + 'px';
+  ytpEl.style.top = a.y + 'px';
+}
+
+// The workspace (page) region of the chrome window: everything between the
+// toolbars and the status bar, already accounting for the download shelf.
+function ytpWorkArea() {
+  const a = document.querySelector('.area');
+  if (a && a.offsetHeight) return { top: a.offsetTop, bottom: a.offsetTop + a.offsetHeight };
+  return { top: 78, bottom: Math.max(140, window.innerHeight - 22) };
+}
+
+// Floating position: centred over the workspace, clamped inside the window.
+function ytpFloatRect() {
+  const w = Math.round(ytpEl.offsetWidth || 340);
+  const h = Math.round(ytpEl.offsetHeight || 200);
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const area = ytpWorkArea();
+  let x = Math.round((vw - w) / 2);
+  let y = Math.round(area.top + Math.max(0, (area.bottom - area.top - h) / 2));
+  x = Math.max(8, Math.min(x, vw - w - 8));
+  y = Math.max(8, Math.min(y, vh - h - 8));
+  return { x: x, y: y, w: w, h: h };
+}
+
+// ── Floating behaviour ──
+// The card is mirrored into its own WebContentsView (yt-overlay.html) so it
+// layers above the page views; the chrome copy stays in the DOM, hidden from
+// paint, as the single source of truth for markup and handlers.
+const YTP_RETURN_MS = 5000;   // how long the menu floats before returning
+const YTP_RETURN_ANIM_MS = 440;
+let ytpTimer = null;
+let ytpHover = false;         // pointer/focus inside the menu pauses the return
+let ytpReturning = false;     // return animation in flight
+let ytpMirrored = false;      // the overlay view is showing the card
+let ytpRect = null;           // current floating rect
+let ytpOpenPending = false;   // an 'open' write is in flight (it carries the markup)
+let ytpSyncQueued = false;    // a content sync arrived during that 'open'
+
+function ytpClearTimer() { clearTimeout(ytpTimer); ytpTimer = null; }
+
+function ytpArmTimer() {
+  ytpClearTimer();
+  if (!ytpOpen || ytpReturning || ytpHover || ytpPicking) return;
+  // A running download keeps the menu up: the user is watching live progress
+  // (and needs the Cancel button). Everything else returns after ~5s.
+  if (ytpPhase === 'working') return;
+  ytpTimer = setTimeout(ytpReturnToToolbar, YTP_RETURN_MS);
+}
+
+function ytpOverlayFallback() {
+  // No overlay view: fall back to the chrome copy (chrome-DOM layer only).
+  ytpMirrored = false;
+  if (!ytpOpen || ytpReturning) return;
+  ytpEl.classList.remove('mirrored');
+  ytpEl.classList.add('float');
+  const r = ytpRect || (ytpRect = ytpFloatRect());
+  ytpEl.style.left = r.x + 'px';
+  ytpEl.style.top = r.y + 'px';
+}
+
+function ytpOverlayRender(mode) {
+  const rect = ytpRect || (ytpRect = ytpFloatRect());
+  const payload = { open: true, mode: mode, rect: rect, html: ytpEl.innerHTML };
+  if (mode === 'return') { payload.from = rect; payload.to = ytpAnchorRect(); }
+  const p = (g.ytOverlay ? Promise.resolve(g.ytOverlay(payload)) : Promise.resolve(false));
+  if (mode === 'open') { ytpMirrored = true; ytpOpenPending = true; } // optimistic: keeps syncs flowing in order
+  const settle = () => {
+    if (mode !== 'open' || !ytpOpenPending) return;
+    ytpOpenPending = false;
+    if (ytpSyncQueued) { ytpSyncQueued = false; ytpSyncOverlay(); } // replay what the open superseded
+  };
+  return p.then((ok) => {
+    ok = !!ok;
+    if (ok) { ytpMirrored = true; ytpEl.classList.remove('float'); }
+    else if (mode === 'open' || mode === 'return') ytpOverlayFallback();
+    settle();
+    return ok;
+  }).catch(() => { if (mode === 'open' || mode === 'return') ytpOverlayFallback(); settle(); return false; });
+}
+
+// Push the freshly rendered markup to the mirror (cheap: IPC keeps ordering, so
+// the last write always wins even if several renders land in one frame). A sync
+// arriving while the 'open' is still in flight is held back instead of sent:
+// main would supersede the open — and with it its intro animation and the chrome
+// focus it establishes — with a message carrying the very same card.
+function ytpSyncOverlay() {
+  if (!ytpOpen || ytpReturning || !ytpMirrored) return;
+  if (ytpOpenPending) { ytpSyncQueued = true; return; }
+  ytpRect = ytpFloatRect();
+  ytpOverlayRender('sync');
+}
+
+function ytpSetOpen(v) {
+  ytpOpen = v;
+  ytpEl.classList.toggle('open', v);
+  ytpEl.classList.remove('float', 'returning');
+  ytpEl.style.opacity = '';
+  if (v) {
+    ytpReturning = false;
+    ytpAnchor();
+    ytpLoadDir(); // refresh the destination folder (re-renders if it changed)
+    ytpRender();
+    ytpEl.classList.add('mirrored'); // never paint the chrome copy over the page
+    ytpRect = ytpFloatRect();
+    ytpOverlayRender('open');
+    ytpArmTimer();
+  } else {
+    ytpClearTimer();
+    ytpReturning = false;
+    ytpMirrored = false;
+    ytpEl.classList.remove('mirrored');
+    try { if (g.ytOverlay) Promise.resolve(g.ytOverlay({ open: false })).catch(() => {}); } catch (e) {}
+  }
+}
+
+// A return flight was cancelled after it had already started (Download was
+// pressed mid-animation): put the card back into its floating open state
+// without touching ytpOpen — it is still true — and re-assert the mirror.
+function ytpReopenCard() {
+  ytpClearTimer();
+  ytpEl.classList.remove('returning');
+  ytpEl.style.opacity = '';
+  ytpEl.classList.add('open');
+  ytpAnchor();
+  ytpRect = ytpFloatRect();
+  ytpOverlayRender('open');
+}
+
+// ~5s after opening, the menu flies back into its toolbar anchor and closes.
+function ytpReturnToToolbar() {
+  ytpClearTimer();
+  // ytpPicking: the native folder dialog has focus — the menu must stay put
+  // until the user closes it (focusout would otherwise start the return clock).
+  if (!ytpOpen || ytpReturning || ytpHover || ytpPicking || ytpPhase === 'working') { ytpArmTimer(); return; }
+  ytpReturning = true;
+  const from = ytpRect || ytpFloatRect();
+  const to = ytpAnchorRect();
+  // The close runs on OUR clock, never on main's answer: the main process can
+  // be busy (first tool probe, a page still loading) and the menu must still
+  // fly home ~5s after it opened. IPC ordering guarantees the mirror receives
+  // the return message before the follow-up close that this timer triggers.
+  const finish = () => {
+    if (!ytpReturning) return;
+    // A download that started mid-flight takes the menu over: keep it up.
+    if (ytpPhase === 'working') { ytpReturning = false; return; }
+    ytpSetOpen(false);
+  };
+  if (ytpMirrored) {
+    ytpOverlayRender('return'); // fire and forget
+    setTimeout(finish, YTP_RETURN_ANIM_MS);
+  } else {
+    // Chrome-DOM fallback: slide the copy back to the anchor, then close.
+    ytpEl.classList.add('returning');
+    ytpEl.style.left = from.x + 'px';
+    ytpEl.style.top = from.y + 'px';
+    ytpEl.style.opacity = '1';
+    void ytpEl.offsetHeight;
+    ytpEl.style.left = to.x + 'px';
+    ytpEl.style.top = to.y + 'px';
+    ytpEl.style.opacity = '0';
+    setTimeout(finish, YTP_RETURN_ANIM_MS);
+  }
+}
+
+function ytpBytes(n) {
+  if (!n || n <= 0) return '';
+  if (n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GB';
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  return Math.round(n / 1024) + ' KB';
+}
+
+function ytpDur(s) {
+  s = Math.round(s || 0);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const mm = h ? String(m).padStart(2, '0') : String(m);
+  return (h ? h + ':' : '') + mm + ':' + String(sec).padStart(2, '0');
+}
+
+function ytpBtnLabel(txt) {
+  const l = ytBtn.querySelector('.yt-lbl');
+  if (l) l.textContent = txt || 'Download';
+}
+
+// Compact a destination path to its last two segments ("…\name\Downloads") —
+// the full path stays available in the row's title tooltip.
+function ytpShortDir(d) {
+  if (!d) return 'Downloads folder';
+  const n = String(d).replace(/[\\/]+$/, '');
+  const i = Math.max(n.lastIndexOf('\\'), n.lastIndexOf('/'));
+  if (i < 0) return n;
+  const j = Math.max(n.lastIndexOf('\\', i - 1), n.lastIndexOf('/', i - 1));
+  return (j >= 0 ? '…' + n.slice(j) : n);
+}
+
+// Read the destination folder from main (cheap invoke; cached in ytpDir).
+// Called at startup and on every open so a change made elsewhere shows up.
+function ytpLoadDir() {
+  if (!g.ytDownloadDir) return Promise.resolve(ytpDir);
+  return Promise.resolve(g.ytDownloadDir()).then((d) => {
+    if (typeof d === 'string' && d && d !== ytpDir) {
+      ytpDir = d;
+      if (ytpOpen && ytpPhase === 'ready') ytpRender();
+    }
+    return ytpDir;
+  }).catch(() => ytpDir);
+}
+
+// "Change" on the folder row: native folder dialog in main. While it is open
+// the 5s return is suspended (ytpPicking) so the menu does not fly home under
+// the dialog. A null answer means "cancelled" — or the folder is pinned by
+// AEGIS_DOWNLOADS_DIR, in which case main never opens a dialog at all.
+async function ytpPickDir() {
+  if (ytpPicking || !g.ytPickDir) return;
+  ytpPicking = true;
+  ytpClearTimer();
+  try {
+    const d = await g.ytPickDir();
+    if (typeof d === 'string' && d) ytpDir = d;
+  } catch (e) {}
+  ytpPicking = false;
+  if (ytpOpen) { ytpRender(); ytpArmTimer(); }
+}
+
+function ytpRender() {
+  const info = ytpInfo;
+  if (info) {
+    ytpTitleEl.textContent = info.title || '';
+    const bits = [];
+    if (info.channel) bits.push(info.channel);
+    if (info.duration) bits.push(ytpDur(info.duration));
+    ytpSubEl.textContent = bits.join(' · ');
+    if (info.thumbnail) { ytpThumb.src = info.thumbnail; ytpThumb.style.display = 'block'; }
+    else ytpThumb.style.display = 'none';
+  } else {
+    ytpTitleEl.textContent = ytActiveUrl() ? 'YouTube video' : '';
+    ytpSubEl.textContent = '';
+    ytpThumb.style.display = 'none';
+  }
+
+  if (ytpPhase === 'loading') {
+    ytpBody.innerHTML = '<div class="ytp-load"><div class="ytp-spin"></div><span>'
+      + esc(ytpSetupLabel || 'Reading available qualities…') + '</span></div>';
+  } else if (ytpPhase === 'ready' && info) {
+    // One selected height even if the probe left ytpSel unset: the list, the
+    // summary chips and the primary button must always agree.
+    const selH = ytpSel || info.defaultH;
+    let rows = '';
+    for (const q of info.qualities) {
+      const sel = q.h === selH;
+      const def = q.h === info.defaultH;
+      const size = q.size ? ytpBytes(q.size) : '—';
+      rows += '<button class="ytp-q' + (sel ? ' sel' : '') + '" data-h="' + q.h + '"'
+            + ' aria-pressed="' + (sel ? 'true' : 'false') + '"'
+            + ' title="' + q.h + 'p — ' + esc(size) + ' — MP4">'
+            + '<span class="ytp-dot"></span>'
+            + '<span class="ytp-qh">' + q.h + 'p</span>'
+            + '<span class="ytp-qs">' + esc(size) + '</span>'
+            + (def ? '<span class="ytp-qdef">Default</span>' : '')
+            + '</button>';
+    }
+    const selQ = info.qualities.find((q) => q.h === selH) || info.qualities[0] || null;
+    const dirRow = '<button id="ytp-dir" class="ytp-dir" title="' + esc(ytpDir || 'Downloads folder') + '">'
+      + '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.6A1.6 1.6 0 0 1 3.6 3h2.2l1.5 1.8h5.1A1.6 1.6 0 0 1 14 6.4v5A1.6 1.6 0 0 1 12.4 13H3.6A1.6 1.6 0 0 1 2 11.4z"/></svg>'
+      + '<span class="ytp-dirp">' + esc(ytpShortDir(ytpDir)) + '</span>'
+      + '<span class="ytp-dirc">Change</span>'
+      + '</button>';
+    // Summary chips: what is about to be written to disk, at a glance.
+    const chips = '<div class="ytp-sum">'
+      + '<span class="ytp-chip acc">Quality <b>' + selH + 'p</b></span>'
+      + (selQ && selQ.size ? '<span class="ytp-chip">Size <b>' + esc(ytpBytes(selQ.size)) + '</b></span>' : '')
+      + '<span class="ytp-chip">Format <b>MP4</b></span>'
+      + '</div>';
+    ytpBody.innerHTML = '<div class="ytp-qhead"><span>Video quality</span><span>' + info.qualities.length + ' available</span></div>'
+      + '<div class="ytp-qlist">' + rows + '</div>'
+      + '<div class="ytp-dest"><div class="ytp-flbl">Save to</div>' + dirRow + '</div>'
+      + chips
+      + '<button id="ytp-go" title="Download this video as MP4">'
+      + '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"/><path d="M4.5 7L8 10.5 11.5 7"/><path d="M3 13.5h10"/></svg>'
+      + 'Download ' + selH + 'p</button>'
+      + '<div class="ytp-priv"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8l5 1.9v4c0 3.1-2.1 5.6-5 6.5-2.9-.9-5-3.4-5-6.5v-4z"/></svg>'
+      + '<span>Saved to the folder above — press Change to pick another. Only download videos you have the right to save.</span></div>';
+    ytpBody.querySelectorAll('.ytp-q').forEach((el) => {
+      el.onclick = () => {
+        ytpSel = parseInt(el.getAttribute('data-h'), 10) || ytpSel;
+        ytpRender();
+      };
+    });
+    const dirBtn = document.getElementById('ytp-dir');
+    if (dirBtn) dirBtn.onclick = ytpPickDir;
+    const go = document.getElementById('ytp-go');
+    if (go) go.onclick = ytpStart;
+  } else if (ytpPhase === 'working') {
+    const eta = ytpEta ? 'ETA ' + ytpEta : '';
+    const speed = ytpSpeed ? ytpBytes(ytpSpeed) + '/s' : '';
+    ytpBody.innerHTML = '<div class="ytp-prog"><div class="ytp-bar"><i style="width:' + (ytpPct || 0) + '%"></i></div>'
+      + '<div class="ytp-stats"><b>' + (ytpPct || 0) + '%</b><span>' + esc(speed) + '</span><span>' + esc(eta) + '</span></div>'
+      + '<div class="ytp-label">' + esc(ytpWorkLabel || 'Downloading video') + ' — ' + esc(info ? info.title : '') + '</div></div>'
+      + '<div class="ytp-acts"><button id="ytp-cancel">Cancel</button></div>';
+    const c = document.getElementById('ytp-cancel');
+    if (c) c.onclick = () => { g.ytCancelDownload(ytpJobId); c.disabled = true; c.textContent = 'Canceling…'; };
+  } else if (ytpPhase === 'done' && ytpDoneInfo) {
+    const folder = ytpDoneInfo.savePath ? ytpDoneInfo.savePath.replace(/[\\/][^\\/]+$/, '') : '';
+    ytpBody.innerHTML = '<div class="ytp-done-t"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg>Download complete</div>'
+      + '<div class="ytp-file">' + esc(ytpDoneInfo.name || '') + (ytpDoneInfo.size ? ' · ' + ytpBytes(ytpDoneInfo.size) : '') + '<br>' + esc(folder) + '</div>'
+      + '<div class="ytp-acts"><button class="pri" id="ytp-show">Show in folder</button><button id="ytp-again">Download again</button></div>';
+    const s = document.getElementById('ytp-show');
+    if (s) s.onclick = () => g.openDownloadFolder(ytpDoneInfo.savePath);
+    const a = document.getElementById('ytp-again');
+    if (a) a.onclick = () => { ytpPhase = info ? 'ready' : 'loading'; ytpRender(); if (!info) ytpProbe(); };
+  } else if (ytpPhase === 'error') {
+    ytpBody.innerHTML = '<div class="ytp-err">' + esc(ytpErrMsg || 'Something went wrong') + '</div>'
+      + '<div class="ytp-acts"><button class="pri" id="ytp-retry">Try again</button></div>';
+    const r = document.getElementById('ytp-retry');
+    if (r) r.onclick = () => { ytpInfo = null; ytpProbe(); };
+  } else {
+    ytpBody.innerHTML = '<div class="ytp-load"><div class="ytp-spin"></div><span>Reading available qualities…</span></div>';
+  }
+  ytpSyncOverlay();
+}
+
+async function ytpProbe() {
+  const url = ytActiveUrl();
+  ytpSeenUrl = url;
+  ytpPhase = 'loading';
+  ytpSetupLabel = '';
+  ytpRender();
+  try {
+    const info = await g.ytVideoInfo(url);
+    // The user may have navigated while the probe ran — a stale result must
+    // never be presented as the current video's qualities.
+    if (ytActiveUrl() !== url) { if (ytpOpen && !ytpBusy) ytpProbe(); return; }
+    if (!info || !info.ok) {
+      ytpPhase = 'error';
+      ytpErrMsg = (info && info.error) || 'Could not read this video';
+      ytpRender();
+      return;
+    }
+    ytpInfo = info;
+    ytpInfoUrl = url;
+    ytpSel = info.defaultH; // 1080p whenever the video offers it
+    ytpPhase = 'ready';
+    ytpRender();
+  } catch (e) {
+    if (ytActiveUrl() !== url) return;
+    ytpPhase = 'error';
+    ytpErrMsg = 'Could not read this video';
+    ytpRender();
+  }
+}
+
+// The user navigated to a different video: drop the stale probe so the next
+// open re-reads the new video's qualities. A running download is unaffected —
+// only finished/idle presentations get reset.
+function ytpInvalidate() {
+  const url = ytActiveUrl();
+  if (ytpSeenUrl === url) return; // nothing new to react to
+  ytpSeenUrl = url;
+  ytpInfo = null;
+  ytpInfoUrl = null;
+  ytpSel = null;
+  if (ytpPhase === 'ready' || ytpPhase === 'error' || ytpPhase === 'done') ytpPhase = 'idle';
+  // An open popover must not keep showing the previous video: re-probe.
+  if (ytpOpen && !ytpBusy && (ytpPhase === 'idle' || ytpPhase === 'loading')) ytpProbe();
+}
+
+async function ytpStart() {
+  if (ytpBusy) return;
+  if (!ytpInfo) { ytpProbe(); return; } // stale/absent probe: re-read the video
+  // A return flight may be mid-animation (5s elapsed right as the user pressed
+  // Download): cancel it, and bring the menu back if it already left, so this
+  // download's progress and its Cancel button stay reachable.
+  const wasReturning = ytpReturning;
+  ytpReturning = false;
+  const url = ytActiveUrl();
+  const height = ytpSel || ytpInfo.defaultH;
+  ytpBusy = true;
+  ytpPhase = 'working'; // BEFORE the open: opening must not arm the 5s return
+  ytpJobId = null;
+  ytpPct = 0; ytpSpeed = 0; ytpEta = ''; ytpWorkLabel = 'Starting download…';
+  if (!ytpOpen) ytpSetOpen(true);
+  else if (wasReturning) ytpReopenCard();
+  ytpBtnLabel('0%');
+  ytpRender();
+  try {
+    // yt-start-download hands back the job id immediately: the job keeps running
+    // in the main process and its terminal state arrives through yt-progress, so
+    // several downloads can be in flight at once without blocking this invoke.
+    const r = await g.ytStartDownload({ url, height, ws: currentDlWs() });
+    if (r && r.ok === false) {
+      ytpPhase = 'error';
+      ytpErrMsg = r.error || 'Download failed';
+      ytpBtnLabel('Download');
+      ytpRender();
+    } else if (r && r.id != null) {
+      ytpJobId = r.id; // 'existing' means an identical job already runs: adopt it
+      if (ytpOpen) ytpArmTimer();
+    }
+  } catch (e) {
+    ytpPhase = 'error';
+    ytpErrMsg = 'Download failed';
+    ytpBtnLabel('Download');
+    ytpRender();
+  } finally {
+    ytpBusy = false;
+  }
+}
+
+g.onYtProgress((d) => {
+  if (!d) return;
+  if (d.phase === 'setup' || d.phase === 'probe') {
+    ytpSetupLabel = d.label || '';
+    if (ytpPhase === 'loading' && ytpOpen) ytpRender();
+    return;
+  }
+  // Events are tagged with their job id: a download started from another
+  // workspace must never drive this popover (it is shown in the shelf instead).
+  if (d.jobId != null) {
+    if (ytpJobId == null) {
+      // The 'started' event can outrun the invoke reply — adopt it while this
+      // popover is the one launching a job.
+      if (ytpBusy || ytpPhase === 'working') ytpJobId = d.jobId;
+      else return;
+    } else if (d.jobId !== ytpJobId) return;
+  }
+  if (d.phase === 'download' || d.phase === 'merge') {
+    ytpPhase = 'working';
+    ytpPct = Math.max(0, Math.min(100, Math.round(d.pct || 0)));
+    ytpSpeed = d.speed || 0;
+    ytpEta = d.eta || '';
+    ytpWorkLabel = d.label || 'Downloading video';
+    ytpBtnLabel(ytpPct + '%');
+    // Always repaint: the chrome copy is the popover's source of truth, and a
+    // menu that auto-returned (or was closed) must still show live progress
+    // when it — or the toolbar label — is looked at again.
+    ytpRender();
+    return;
+  }
+  if (d.phase === 'done') {
+    ytpPhase = 'done';
+    ytpDoneInfo = { savePath: d.savePath, name: d.name, size: d.size };
+    ytpBtnLabel('Download');
+    ytpRender();
+    ytpArmTimer();
+    return;
+  }
+  if (d.phase === 'canceled') {
+    ytpPhase = ytpInfo ? 'ready' : 'idle';
+    ytpBtnLabel('Download');
+    ytpRender();
+    if (ytpOpen && !ytpInfo && !ytpBusy) ytpProbe();
+    ytpArmTimer();
+    return;
+  }
+  if (d.phase === 'error') {
+    ytpPhase = 'error';
+    ytpErrMsg = d.message || 'Download failed';
+    ytpBtnLabel('Download');
+    ytpRender();
+    ytpArmTimer();
+  }
+});
+
+ytBtn.onclick = () => {
+  const next = !ytpOpen;
+  ytpSetOpen(next);
+  if (next && !ytpInfo && ytpPhase !== 'working' && ytpPhase !== 'done') ytpProbe();
+};
+ytpCloseBtn.onclick = () => ytpSetOpen(false);
+
+// "Download Full Playlist": opens the dedicated playlist window for the
+// playlist page that is currently open (main validates the URL again).
+const ytpbBtn = document.getElementById('ytpb-btn');
+if (ytpbBtn) ytpbBtn.onclick = () => {
+  if (typeof g.ytPlaylistWindow !== 'function') return;
+  if (ytpOpen && ytpPhase !== 'working' && !ytpBusy) ytpSetOpen(false);
+  Promise.resolve(g.ytPlaylistWindow({ url: ytActiveUrl(), ws: currentDlWs() })).catch(() => {});
+};
+
+// The mirrored card forwards its gestures back here (one implementation).
+if (g.onYtOverlayAction) g.onYtOverlayAction((a) => {
+  if (!a || !ytpOpen || ytpReturning) return;
+  if (a.h != null && a.h !== '') {
+    const row = ytpBody.querySelector('.ytp-q[data-h="' + String(a.h).replace(/["\\]/g, '') + '"]');
+    if (row) row.click();
+    return;
+  }
+  if (a.id) {
+    const el = document.getElementById(a.id);
+    if (el && ytpEl.contains(el)) el.click();
+  }
+});
+
+// Pointer over the floating menu suspends the 5s return until it leaves.
+function ytpHoverSet(v) {
+  ytpHover = !!v;
+  if (ytpHover) ytpClearTimer(); else ytpArmTimer();
+}
+if (g.onYtOverlayHover) g.onYtOverlayHover(ytpHoverSet);
+ytpEl.addEventListener('pointerenter', () => ytpHoverSet(true));
+ytpEl.addEventListener('pointerleave', () => ytpHoverSet(false));
+ytpEl.addEventListener('focusin', () => ytpHoverSet(true));
+ytpEl.addEventListener('focusout', () => ytpHoverSet(false));
+
+// Prime the destination folder at startup so the folder row is correct from
+// the very first open (the invoke resolves long before the user clicks).
+ytpLoadDir();
+
+document.addEventListener('mousedown', (e) => {
+  if (!ytpOpen) return;
+  if (ytpEl.contains(e.target) || ytBtn.contains(e.target)) return;
+  ytpSetOpen(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && ytpOpen) { e.preventDefault(); ytpSetOpen(false); }
+});
+window.addEventListener('resize', () => {
+  if (!ytpOpen || ytpReturning) return;
+  if (ytpMirrored) { ytpRect = ytpFloatRect(); ytpOverlayRender('sync'); return; }
+  if (ytpEl.classList.contains('float')) { ytpAnchor(); ytpOverlayFallback(); return; }
+  ytpAnchor();
 });
 
 ['mousemove','mousedown','keydown','click','scroll','touchstart','wheel'].forEach(evt => {

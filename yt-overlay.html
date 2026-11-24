@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  /* Floating YouTube quality download popover.
+     controls.html owns the real popover (probe, quality rows, progress, buttons)
+     and mirrors its markup here; this view is added ABOVE the page WebContentsViews
+     (main.js 'yt-overlay'), exactly like suggest-overlay.html, so the menu floats
+     over the page instead of hiding underneath it.
+     The card below mirrors #ytp + .ytp-* in controls.html EXACTLY (same box model,
+     fonts, paddings) so the mirrored copy is pixel-identical to the chrome copy. */
+  :root{
+    --surface2:#14141e;
+    --border:rgba(255,255,255,0.03);
+    --border2:rgba(255,255,255,0.055);
+    --text:#e2e2eb;
+    --text2:#88889c;
+    --text3:#58586e;
+    --blue:#4a8bc5;
+    --green:#48bb78;
+    --red:#e56a6a;
+    --ease-out:cubic-bezier(0, 0, 0.2, 1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:transparent;overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter','Helvetica Neue',system-ui,sans-serif;
+    font-size:13px;line-height:1.45;color:var(--text);user-select:none;cursor:default;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+  /* ── Card (mirrors #ytp in controls.html) ── */
+  #ytp{position:absolute;display:flex;flex-direction:column;background:rgba(13,14,27,0.985);
+    border:1px solid var(--border2);border-radius:12px;
+    box-shadow:0 16px 48px rgba(0,0,0,0.65),0 4px 14px rgba(0,0,0,0.45);
+    overflow:hidden;max-height:calc(100vh - 16px);transform-origin:top left}
+  #ytp.yt-in{animation:ytp-in .18s var(--ease-out)}
+  @keyframes ytp-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+  #ytp.yt-out{transition:left .42s var(--ease-out),top .42s var(--ease-out),opacity .3s ease-in .12s}
+  .ytp-head{display:flex;gap:10px;padding:11px 11px 9px;align-items:flex-start;border-bottom:1px solid var(--border);flex:none}
+  #ytp-thumb{width:64px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);flex:none}
+  .ytp-meta{flex:1;min-width:0}
+  #ytp-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+  #ytp-sub{font-size:10px;color:var(--text3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #ytp-x{width:22px;height:22px;flex:none;background:transparent;border:none;color:var(--text3);cursor:pointer;border-radius:5px;display:flex;align-items:center;justify-content:center}
+  #ytp-x:hover{background:var(--border2);color:var(--text)}
+  #ytp-x svg{width:11px;height:11px}
+  #ytp-body{padding:10px 11px 11px;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+  .ytp-load{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--text2);padding:12px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px}
+  .ytp-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--border2);border-top-color:var(--blue);animation:ytp-spin .8s linear infinite;flex:none}
+  @keyframes ytp-spin{to{transform:rotate(360deg)}}
+  /* Header above the list: label left, live count right */
+  .ytp-qhead{font-size:9.5px;letter-spacing:0.6px;text-transform:uppercase;color:var(--text3);margin:2px 0 7px;display:flex;justify-content:space-between;align-items:center}
+  .ytp-qhead span:last-child{color:var(--text2);font-weight:600}
+  /* The qualities live in ONE bordered group (radio list) instead of N loose
+     cards: quieter, denser, and the selected row reads instantly. */
+  /* The qualities live in ONE bordered group (radio list) instead of N loose
+     cards: quieter, denser, and the selected row reads instantly. The group is
+     also the scroll container — a long list caps here and scrolls instead of
+     growing under the destination/CTA block below. */
+  .ytp-qlist{display:flex;flex-direction:column;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;overflow-x:hidden;overflow-y:auto;max-height:min(230px,42vh);overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.16) transparent}
+  /* Sleek 6px scrollbar (Chromium + Firefox), only while it can scroll */
+  .ytp-qlist::-webkit-scrollbar{width:6px;height:6px}
+  .ytp-qlist::-webkit-scrollbar-track{background:transparent}
+  .ytp-qlist::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.14);border-radius:99px}
+  .ytp-qlist::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.26)}
+  .ytp-qlist::-webkit-scrollbar-corner{background:transparent}
+  .ytp-q{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;background:transparent;border:0;border-bottom:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:12px;text-align:left;position:relative;transition:background .12s var(--ease-out),color .12s var(--ease-out)}
+  .ytp-qlist .ytp-q:last-child{border-bottom:0}
+  .ytp-q:hover{background:rgba(255,255,255,0.045);color:var(--text)}
+  .ytp-q:focus-visible{outline:none;background:rgba(255,255,255,0.06);box-shadow:inset 0 0 0 2px rgba(66,153,225,0.5)}
+  /* Accent rail on the selected row (clipped by the group's radius) */
+  .ytp-q::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:transparent;transition:background .12s var(--ease-out)}
+  .ytp-q.sel{background:rgba(229,106,106,0.13);color:var(--text)}
+  .ytp-q.sel::before{background:var(--red)}
+  .ytp-dot{width:14px;height:14px;flex:none;border-radius:50%;border:1.5px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;transition:all .12s var(--ease-out)}
+  .ytp-q:hover .ytp-dot{border-color:rgba(255,255,255,0.34)}
+  .ytp-q.sel .ytp-dot{border-color:var(--red);background:radial-gradient(circle at center,var(--red) 0 45%,transparent 47%);box-shadow:0 0 0 3px rgba(229,106,106,0.16)}
+  .ytp-qh{font-weight:700;font-size:12.5px;color:var(--text);min-width:50px;flex:none;letter-spacing:0.2px;font-variant-numeric:tabular-nums}
+  .ytp-qs{color:var(--text3);font-size:10.5px;font-variant-numeric:tabular-nums;flex:1;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ytp-q.sel .ytp-qs{color:#f0b6b6}
+  .ytp-qdef{font-size:8.5px;font-weight:700;background:rgba(255,255,255,0.07);color:var(--text2);padding:2px 7px;border-radius:999px;letter-spacing:0.4px;text-transform:uppercase;flex:none}
+  .ytp-q.sel .ytp-qdef{background:rgba(229,106,106,0.3);color:#ffc2c2}
+  /* ── Below the qualities: destination, summary, primary action ── */
+  .ytp-dest{margin-top:11px}
+  .ytp-flbl{font-size:9.5px;letter-spacing:0.6px;text-transform:uppercase;color:var(--text3);margin:0 0 6px 1px}
+  .ytp-dir{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text2);cursor:pointer;font-size:11.5px;text-align:left;transition:all .12s var(--ease-out)}
+  .ytp-dir:hover{border-color:rgba(229,106,106,0.45);background:rgba(255,255,255,0.035);color:var(--text)}
+  .ytp-dir:focus-visible{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(66,153,225,0.3)}
+  .ytp-dir svg{width:16px;height:16px;flex:none;color:var(--blue)}
+  .ytp-dirp{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ytp-dirc{font-size:9.5px;font-weight:700;color:var(--blue);flex:none;letter-spacing:0.4px;text-transform:uppercase}
+  .ytp-sum{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+  .ytp-chip{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:600;letter-spacing:0.3px;color:var(--text2);background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:3px 8px}
+  .ytp-chip b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+  .ytp-chip.acc{border-color:rgba(229,106,106,0.35);background:rgba(229,106,106,0.1);color:#f0b6b6}
+  .ytp-chip.acc b{color:#ffd7d7}
+  #ytp-go{width:100%;margin-top:10px;padding:10px;border-radius:9px;border:1px solid rgba(229,106,106,0.55);background:linear-gradient(180deg,#e06a6a,#cb5050);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;letter-spacing:0.2px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 16px rgba(229,106,106,0.2);transition:all .14s var(--ease-out)}
+  #ytp-go svg{width:14px;height:14px;flex:none}
+  #ytp-go:hover{background:linear-gradient(180deg,#ea7a7a,#d55c5c);box-shadow:0 8px 20px rgba(229,106,106,0.3);transform:translateY(-1px)}
+  #ytp-go:active{transform:translateY(0);box-shadow:0 4px 10px rgba(229,106,106,0.22)}
+  #ytp-go:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(229,106,106,0.35)}
+  .ytp-prog{margin-top:2px}
+  .ytp-bar{height:6px;border-radius:3px;background:var(--border2);overflow:hidden}
+  .ytp-bar i{display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,#e96a6a,#f0a35c);transition:width .3s var(--ease-out);font-style:normal}
+  .ytp-stats{display:flex;justify-content:space-between;gap:6px;font-size:10px;color:var(--text2);margin-top:6px;font-variant-numeric:tabular-nums}
+  .ytp-stats b{font-weight:700;color:var(--text)}
+  .ytp-label{font-size:10.5px;color:var(--text3);margin-top:5px}
+  .ytp-err{font-size:11px;color:#ff9a9a;background:rgba(229,106,106,0.1);border:1px solid rgba(229,106,106,0.3);border-radius:8px;padding:8px 10px;line-height:1.45;word-break:break-word}
+  .ytp-done-t{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--green)}
+  .ytp-done-t svg{width:14px;height:14px}
+  .ytp-file{font-size:10px;color:var(--text3);margin-top:6px;word-break:break-all;line-height:1.45}
+  .ytp-acts{display:flex;gap:7px;margin-top:10px}
+  .ytp-acts button{flex:1;padding:9px 8px;font-size:11px;font-weight:600;border-radius:9px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;transition:all .12s var(--ease-out)}
+  .ytp-acts button:hover{background:var(--border2);color:var(--text);border-color:rgba(255,255,255,0.1)}
+  .ytp-acts button:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(66,153,225,0.3)}
+  .ytp-acts button.pri{border-color:rgba(229,106,106,0.45);background:rgba(229,106,106,0.14);color:#ffb9b9}
+  .ytp-acts button.pri:hover{background:rgba(229,106,106,0.24);color:#fff}
+  .ytp-note{font-size:10px;color:var(--text3);margin-top:8px;text-align:center}
+  .ytp-note a{color:var(--blue);cursor:pointer;text-decoration:none}
+  .ytp-note a:hover{text-decoration:underline}
+  .ytp-priv{display:flex;gap:7px;align-items:flex-start;font-size:9.5px;color:var(--text3);margin-top:10px;line-height:1.55}
+  .ytp-priv svg{width:11px;height:11px;flex:none;margin-top:2px;opacity:.8}
+</style>
+</head>
+<body>
+<div id="ytp"></div>
+<script>
+  const g = window.ghost;
+  const ytp = document.getElementById('ytp');
+  let hovering = false;
+
+  function paint(d) {
+    if (!d) return;
+    if (typeof d.w === 'number' && d.w > 0) ytp.style.width = d.w + 'px';
+    if (d.html != null && d.html !== ytp.innerHTML) ytp.innerHTML = d.html;
+
+    if (d.mode === 'return') {
+      // Fly the card back onto the toolbar anchor, then fade it out.
+      ytp.classList.remove('yt-in');
+      ytp.classList.add('yt-out');
+      ytp.style.transition = 'none';
+      ytp.style.left = d.left + 'px';
+      ytp.style.top = d.top + 'px';
+      ytp.style.opacity = '1';
+      void ytp.offsetHeight; // commit the start position
+      ytp.style.transition = '';
+      ytp.style.left = d.toLeft + 'px';
+      ytp.style.top = d.toTop + 'px';
+      ytp.style.opacity = '0';
+      return;
+    }
+
+    ytp.classList.add('yt-seen');
+    ytp.classList.remove('yt-out');
+    ytp.style.transition = 'none';
+    ytp.style.left = d.left + 'px';
+    ytp.style.top = d.top + 'px';
+    ytp.style.opacity = '1';
+    if (d.mode === 'open') { // (re)play the intro only on a fresh open
+      ytp.classList.remove('yt-in');
+      void ytp.offsetHeight;
+      ytp.classList.add('yt-in');
+    }
+  }
+
+  if (g && g.onYtOverlayRender) g.onYtOverlayRender(paint);
+
+  // Every gesture is forwarded to controls.html, which owns the real popover.
+  ytp.addEventListener('click', (e) => {
+    if (!g || !g.ytOverlayAction) return;
+    const row = e.target.closest('.ytp-q');
+    if (row && row.hasAttribute('data-h')) {
+      e.preventDefault();
+      Promise.resolve(g.ytOverlayAction({ h: row.getAttribute('data-h') })).catch(() => {});
+      return;
+    }
+    const el = e.target.closest('[id]');
+    if (el) Promise.resolve(g.ytOverlayAction({ id: el.id })).catch(() => {});
+  });
+
+  // Hovering keeps the menu alive: the 5s return is paused until the pointer leaves.
+  ytp.addEventListener('pointerenter', () => { hovering = true; if (g && g.ytOverlayHover) g.ytOverlayHover(true); });
+  ytp.addEventListener('pointerleave', () => { hovering = false; if (g && g.ytOverlayHover) g.ytOverlayHover(false); });
+</script>
+</body>
+</html>

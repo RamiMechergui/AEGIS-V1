@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>YouTube Download Parameters</title>
+<style>
+/* ── YouTube Download Parameters ──────────────────────────────────────────
+   Same design language as AEGIS Parameters: no AEGIS / Workspaces nav, a
+   single QUIT control in the top bar, dark-blue cards, one shared set of
+   buttons/inputs and one custom scrollbar.                                 */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg1:#141432; --bg2:#1a1a2e; --bg3:#16213e;
+  --line:#1a365d; --line-hi:#2f5588;
+  --panel:linear-gradient(180deg,rgba(15,52,96,0.45),rgba(11,34,66,0.32));
+  --field:#0a2950;
+  --text:#e2e8f0; --muted:#8ea6c4; --dim:#5b7089;
+  --blue:#4299e1; --blue-d:#3182ce;
+  --green:#68d391; --red:#fc8181; --amber:#f6ad55;
+  --track:#0a1730;
+}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(135deg,var(--bg1) 0%,var(--bg2) 50%,var(--bg3) 100%);color:var(--text);overflow:hidden}
+body{display:flex;flex-direction:column}
+
+/* ── Top bar: QUIT is the only application-level control up here ── */
+.topbar{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;padding:13px 16px 1px;-webkit-app-region:drag}
+.quit-btn{-webkit-app-region:no-drag;
+  display:inline-flex;align-items:center;justify-content:center;min-width:78px;height:30px;padding:0 16px;
+  border-radius:9px;border:1px solid var(--line);background:rgba(10,41,80,0.75);color:#b9cbe3;
+  font-size:11px;font-weight:700;letter-spacing:1.7px;cursor:pointer;user-select:none;
+  transition:background .18s var(--ease, ease),border-color .18s,color .18s,box-shadow .18s,transform .1s;
+}
+.quit-btn:hover{background:rgba(229,62,62,0.16);border-color:#e53e3e;color:#ffd3d3;box-shadow:0 4px 14px rgba(229,62,62,0.20)}
+.quit-btn:active{transform:translateY(1px);background:rgba(229,62,62,0.28)}
+.quit-btn:focus-visible{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(66,153,225,0.35)}
+
+/* ── Scrolling content + custom scrollbar (visible on the dark-blue ground) ── */
+.scroll{
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:12px clamp(14px,5vw,26px) 22px;
+  scrollbar-width:thin;scrollbar-color:#4299e1 #0a1730;
+}
+.scroll::-webkit-scrollbar{width:11px}
+.scroll::-webkit-scrollbar-track{background:var(--track);border-radius:999px}
+.scroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#55aef0,#2f7fd0);border-radius:999px;border:3px solid var(--track)}
+.scroll::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#7cc4f7,#4299e1)}
+.scroll::-webkit-scrollbar-thumb:active{background:linear-gradient(180deg,#9ad2fb,#55aef0)}
+.scroll::-webkit-scrollbar-corner{background:transparent}
+
+/* ── Header / visual hierarchy ── */
+.header{text-align:center;margin:2px 0 24px;-webkit-app-region:drag}
+.header h1{font-size:21px;font-weight:600;letter-spacing:.3px;color:#eaf3ff}
+.header .rule{width:46px;height:2px;margin:11px auto 0;border-radius:2px;background:linear-gradient(90deg,transparent,var(--blue),transparent)}
+.header p{font-size:12px;color:var(--green);margin-top:11px;letter-spacing:.2px}
+
+/* ── Cards / sections ── */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 20px 18px;margin-bottom:16px;box-shadow:0 12px 30px rgba(3,10,24,0.28);transition:border-color .2s}
+.card:hover{border-color:var(--line-hi)}
+.card-title{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:#e8f0fb;letter-spacing:.2px}
+.card-title::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--blue);box-shadow:0 0 9px rgba(66,153,225,0.85);flex-shrink:0}
+.card-desc{font-size:11.5px;color:var(--muted);line-height:1.65;margin:8px 0 15px}
+.card-desc b{color:#c3d6ee;font-weight:600}
+
+/* ── Selected folder display ── */
+.path-box{
+  position:relative;min-height:48px;padding:12px 14px 12px 38px;
+  background:var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%234299e1' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.6A1.6 1.6 0 0 1 3.6 3h2.1L7.1 4.8h5.3A1.6 1.6 0 0 1 14 6.4v5A1.6 1.6 0 0 1 12.4 13H3.6A1.6 1.6 0 0 1 2 11.4z'/%3E%3C/svg%3E") no-repeat 13px center/16px 16px;
+  border:1px solid var(--line);border-radius:11px;
+  font-size:12px;font-family:Consolas,'Courier New',monospace;color:#dbe7f6;
+  word-break:break-all;line-height:1.55;
+  transition:border-color .2s,box-shadow .2s,padding-right .2s;
+}
+.path-box:hover{border-color:var(--line-hi)}
+.path-box.dirty{border-color:var(--blue);box-shadow:0 0 0 3px rgba(66,153,225,0.14);padding-right:84px}
+.path-box.dirty::after{
+  content:"UNSAVED";position:absolute;top:-9px;right:11px;
+  padding:3px 8px;border-radius:999px;background:var(--blue);color:#06213d;
+  font-size:9px;font-weight:700;letter-spacing:.9px;line-height:1.2;
+}
+.pinned-note{display:none;font-size:11px;color:var(--amber);background:rgba(246,173,116,0.08);border:1px solid rgba(246,173,116,0.35);border-radius:10px;padding:10px 13px;margin-top:13px;line-height:1.6}
+
+/* ── Buttons ── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;height:40px;padding:0 18px;
+  border:1px solid transparent;border-radius:11px;font-size:13px;font-weight:600;letter-spacing:.2px;
+  cursor:pointer;user-select:none;white-space:nowrap;
+  transition:background .18s,border-color .18s,color .18s,box-shadow .2s,transform .1s;
+}
+.btn svg{width:15px;height:15px;flex-shrink:0}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+.btn:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(66,153,225,0.35)}
+.btn-ghost{background:var(--field);border-color:#1f4a7d;color:#cfe1f5}
+.btn-ghost:hover{background:#0f3460;border-color:var(--blue);color:#fff;transform:translateY(-1px);box-shadow:0 6px 16px rgba(15,52,96,0.55)}
+.btn-ghost:active{transform:translateY(0)}
+.btn-primary{background:linear-gradient(135deg,#4aa3ee,#2f7fd0);color:#fff;box-shadow:0 6px 16px rgba(47,127,208,0.30)}
+.btn-primary:hover{background:linear-gradient(135deg,#5cb0f5,#3a8ada);transform:translateY(-1px);box-shadow:0 10px 22px rgba(47,127,208,0.42)}
+.btn-primary:active{transform:translateY(1px);box-shadow:0 3px 10px rgba(47,127,208,0.30)}
+/* The optional "reset" action stays visually secondary to Choose / Save */
+.btn-quiet{background:transparent;border-color:#1f4a7d;color:#9fb6d4}
+.btn-quiet:hover{background:rgba(15,52,96,0.5);border-color:var(--blue);color:#fff;transform:translateY(-1px)}
+.btn-quiet:active{transform:translateY(0)}
+.btn + .btn{margin-top:10px}
+.btn-row{display:flex;gap:10px;margin-top:15px}
+/* Row buttons size to their own label, then share the leftover space — the
+   label never wraps even in the narrowest parameter window. */
+.btn-row .btn{flex:1 1 auto;min-width:0;padding:0 12px;font-size:12.5px;gap:7px}
+
+/* ── Feedback + footer ── */
+.msg{font-size:11.5px;line-height:1.5;margin-top:10px;min-height:17px;text-align:left}
+.msg-ok{color:var(--green)}
+.msg-err{color:var(--red)}
+.msg-info{color:var(--muted)}
+.footer{text-align:center;padding:16px 0 6px;font-size:10px;letter-spacing:.7px;color:#46597a}
+
+@media (max-width:340px){ .btn-row{flex-direction:column} .btn-row .btn + .btn{margin-top:0} }
+@media (max-height:520px){ .header{margin-bottom:16px} .header h1{font-size:19px} }
+</style>
+</head>
+<body>
+<!-- Top section: the AEGIS / Workspaces navigation is gone — QUIT is the only control -->
+<div class="topbar">
+  <button class="quit-btn" id="quit-btn" type="button" title="Close YouTube Download Parameters">QUIT</button>
+</div>
+
+<div class="scroll">
+  <div class="header">
+    <h1>YouTube Download Parameters</h1>
+    <div class="rule"></div>
+    <p>Destination folder for YouTube downloads</p>
+  </div>
+
+  <section class="card">
+    <div class="card-title">Download folder</div>
+    <div class="card-desc">Videos saved with the <b>Download</b> button on YouTube are stored here. By default they follow the default downloads folder set in <b>AEGIS Parameters</b> — press <b>Choose folder…</b> to give YouTube its own folder, then <b>Save</b>.</div>
+
+    <div class="path-box" id="path" title="">Reading current folder&hellip;</div>
+    <div class="pinned-note" id="pinned-note">This install fixes the download folder through <b>AEGIS_DOWNLOADS_DIR</b>, so it cannot be changed from here.</div>
+    <div class="msg" id="follow-note" style="display:none;margin-top:9px"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="choose" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.6A1.6 1.6 0 0 1 3.6 3h2.1L7.1 4.8h5.3A1.6 1.6 0 0 1 14 6.4v5A1.6 1.6 0 0 1 12.4 13H3.6A1.6 1.6 0 0 1 2 11.4z"/></svg>
+        Choose folder…
+      </button>
+      <button class="btn btn-primary" id="save" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.4 6.4 12 13 4.6"/></svg>
+        Save
+      </button>
+    </div>
+    <button class="btn btn-quiet" id="reset" type="button" style="display:none;margin-top:10px">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a5 5 0 1 0 1.6-3.7L3 6"/><path d="M3 2.8V6h3.2"/></svg>
+      Use the default downloads folder
+    </button>
+    <div id="msg" class="msg"></div>
+  </section>
+
+  <div class="footer">AEGIS v1.0 &mdash; Zero tracking. Zero cache.</div>
+</div>
+
+<script>
+const g = window.ghost;
+
+const pathEl = document.getElementById('path');
+const noteEl = document.getElementById('pinned-note');
+const followEl = document.getElementById('follow-note');
+const chooseBtn = document.getElementById('choose');
+const saveBtn = document.getElementById('save');
+const resetBtn = document.getElementById('reset');
+const msgEl = document.getElementById('msg');
+
+let current = '';   // last saved folder (what the feature uses right now)
+let chosen = null;  // draft picked by the user — persisted only on Save
+
+function show(text, cls) { msgEl.textContent = text; msgEl.className = 'msg ' + (cls || 'msg-info'); }
+function renderPath(p, dirty) {
+  pathEl.textContent = p;
+  pathEl.title = p; // full path on hover
+  pathEl.classList.toggle('dirty', !!dirty);
+}
+
+// custom: YouTube has its own folder; otherwise it follows the default folder
+// from AEGIS Parameters (defaultDir), shown as an informational note.
+function renderFollow(s) {
+  const custom = !!(s && s.custom);
+  resetBtn.style.display = custom ? '' : 'none';
+  if (custom) { followEl.style.display = 'none'; return; }
+  followEl.style.display = 'block';
+  followEl.textContent = 'Following the default downloads folder from AEGIS Parameters' +
+    (s && s.defaultDir ? ' (' + s.defaultDir + ')' : '') + '.';
+}
+
+async function load() {
+  let s;
+  try { s = await g.ytDlParams(); } catch (e) { s = null; }
+  if (!s) { show('Could not read the current folder.', 'msg-err'); return; }
+  current = s.dir || '';
+  renderPath(current, false);
+  renderFollow(s);
+  if (s.pinned) {
+    noteEl.style.display = 'block';
+    chooseBtn.disabled = true;
+    saveBtn.disabled = true;
+    resetBtn.style.display = 'none';
+    show('The download folder is managed externally and cannot be changed here.', 'msg-info');
+  } else {
+    show('Current folder — nothing is changed until you press Save.', 'msg-info');
+  }
+}
+
+chooseBtn.onclick = async () => {
+  if (chooseBtn.disabled) return;
+  chooseBtn.disabled = true;
+  show('Opening the folder picker…', 'msg-info');
+  try {
+    const r = await g.chooseDownloadDir();
+    if (r && r.path) {
+      chosen = r.path;
+      renderPath(chosen, true);
+      show('Unsaved change — press Save to apply it.', 'msg-info');
+    } else if (r && r.pinned) {
+      show('The download folder is managed externally and cannot be changed here.', 'msg-info');
+    } else {
+      show('Current folder — nothing is changed until you press Save.', 'msg-info'); // cancelled
+    }
+  } catch (e) {
+    show('Could not open the folder picker.', 'msg-err');
+  } finally {
+    chooseBtn.disabled = false;
+  }
+};
+
+saveBtn.onclick = async () => {
+  if (saveBtn.disabled) return;
+  if (!chosen) { show('Choose a folder first.', 'msg-err'); return; }
+  saveBtn.disabled = true;
+  try {
+    const r = await g.ytSetDownloadDir(chosen);
+    if (r && r.ok) {
+      current = r.dir || chosen;
+      chosen = null;
+      renderPath(current, false);
+      show('Saved! New downloads will use this folder.', 'msg-ok');
+      const s = await g.ytDlParams();
+      renderFollow(s || { custom: true });
+    } else {
+      show((r && r.error) || 'Could not save the folder.', 'msg-err');
+    }
+  } catch (e) {
+    show('Could not save the folder.', 'msg-err');
+  } finally {
+    saveBtn.disabled = false;
+  }
+};
+
+// Back to "follow the default downloads folder from AEGIS Parameters".
+resetBtn.onclick = async () => {
+  if (resetBtn.style.display === 'none') return;
+  resetBtn.disabled = true;
+  try {
+    const r = await g.ytResetDownloadDir();
+    if (r && r.ok) {
+      current = r.dir || '';
+      chosen = null;
+      renderPath(current, false);
+      renderFollow({ custom: false, defaultDir: current });
+      show('YouTube downloads now follow the default downloads folder.', 'msg-ok');
+    } else {
+      show((r && r.error) || 'Could not reset the folder.', 'msg-err');
+    }
+  } catch (e) {
+    show('Could not reset the folder.', 'msg-err');
+  } finally {
+    resetBtn.disabled = false;
+  }
+};
+
+// QUIT closes this parameter window only — the browser windows stay untouched.
+document.getElementById('quit-btn').onclick = () => window.close();
+
+load();
+</script>
+</body>
+</html>

@@ -99,6 +99,11 @@ body::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opac
 .wc:hover .wc-icon{transform:scale(1.08) rotate(-4deg)}
 .wc-meta{flex:1;min-width:0}
 .wc-name{font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wc-google{font-size:9.5px;color:var(--text3);margin-top:3px;line-height:1.4}
+.wc-google.linked{color:var(--blue);cursor:pointer;transition:color .15s var(--ease)}
+.wc-google.linked:hover{text-decoration:underline}
+.wc-google.loading{color:var(--text2)}
+.wc-google.email{color:var(--green);word-break:break-all;cursor:default}
 .wc-date{font-size:9.5px;color:var(--text3);margin-top:2px}
 .wc-del{background:none;border:none;color:var(--text3);cursor:pointer;width:22px;height:22px;
   display:flex;align-items:center;justify-content:center;border-radius:6px;flex-shrink:0;opacity:0;
@@ -118,6 +123,10 @@ body::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opac
 .wc-stat .dot{width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block;
   animation:pulse-dot 2s ease-in-out infinite}
 @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.35}}
+/* Ghost Workspace: the "in-memory only" pill — violet, matching its card color */
+.ghost-pill{color:#a78bfa;background:rgba(139,92,246,.14);border:1px solid rgba(139,92,246,.35);
+  padding:1px 7px;border-radius:var(--radius-pill,999px);font-size:9px;letter-spacing:.4px;
+  text-transform:uppercase;font-weight:600}
 .wc-open{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:500;
   margin-top:10px;padding-top:10px;border-top:1px solid var(--border);
   color:var(--ws-color,var(--blue));opacity:0;transition:all .2s var(--ease);transform:translateX(-4px)}
@@ -164,6 +173,8 @@ body::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opac
 .mb .mp:hover{background:var(--blue-hover);transform:translateY(-1px)}
 .mb .ms{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
 .mb .ms:hover{background:var(--surface3);color:var(--text)}
+.mb .mp.danger{background:var(--red)}
+.mb .mp.danger:hover{background:#ef7b7b;transform:translateY(-1px)}
 </style>
 </head>
 <body>
@@ -249,6 +260,19 @@ body::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opac
   </div>
 </div>
 
+<!-- Delete Workspace Confirmation -->
+<div class="modal" id="dm">
+  <div class="mbox">
+    <h3>Delete Workspace</h3>
+    <p id="dmdesc">This cannot be undone.</p>
+    <div class="merr" id="dmerr"></div>
+    <div class="mb">
+      <button class="ms" id="dmc">Cancel</button>
+      <button class="mp danger" id="dmok">Delete Workspace</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const g = window.ghost;
 const gl = document.getElementById('gl');
@@ -276,6 +300,35 @@ const icons = [
 
 let allWorkspaces = [];
 let mediaByWs = {};
+let googleByWs = {};
+let googleEmails = {};
+let googleEmailBusy = {};   // read in flight for this workspace
+let googleEmailFailed = {}; // auto read failed — show a discreet retry link
+
+// Show the signed-in Google address directly under the workspace name (no
+// click needed). The read runs in the main process: fast path is an already
+// open Gmail tab; otherwise one hidden Gmail load, then cached.
+function autoLoadGoogleEmail(wsId, gEl) {
+  if (googleEmails[wsId] || googleEmailBusy[wsId]) return;
+  googleEmailBusy[wsId] = true;
+  g.getGoogleEmail(wsId).then(r => {
+    googleEmailBusy[wsId] = false;
+    const ok = !!(r && r.ok && r.email);
+    if (ok) { googleEmails[wsId] = r.email; googleEmailFailed[wsId] = false; }
+    else googleEmailFailed[wsId] = true;
+    if (!gEl.isConnected) { render(allWorkspaces, document.getElementById('ws-search').value); return; }
+    if (ok) {
+      gEl.classList.remove('loading');
+      gEl.classList.add('email');
+      gEl.textContent = r.email;
+    } else {
+      gEl.classList.remove('loading');
+      gEl.classList.add('linked');
+      gEl.textContent = 'Load email';
+      gEl.title = (r && r.error) || 'Could not read the email.';
+    }
+  }).catch(() => { googleEmailBusy[wsId] = false; googleEmailFailed[wsId] = true; });
+}
 
 function iconForWs(w, idx) { return icons[idx % icons.length]; }
 
@@ -296,6 +349,31 @@ function render(ws, filter = '') {
       ? `<span class="playing-badge"><svg viewBox="0 0 16 16" fill="currentColor" style="animation:pulse 1.5s ease-in-out infinite"><path d="M5 2v9.3A3 3 0 1 0 7 13V5.5l5-1v3.8A3 3 0 1 0 14 9V1z"/></svg>${esc(playing[0].title || 'Audio')}</span>`
       : '';
     const iconBg = (w.color || '#4a8bc5') + '22';
+    const isGhost = !!w.ghost;
+    // The email lives in SQL (workspaces.google_email): show the stored value
+    // right away; the live read / background watcher refreshes it when needed.
+    const gEmail = googleEmails[w.id] || w.google_email || null;
+    const gStatus = isGhost
+      ? `<div class="wc-google" data-ews="${w.id}">Session discarded on close</div>`
+      : gEmail
+      ? `<div class="wc-google email" data-ews="${w.id}">${esc(gEmail)}</div>`
+      : (googleByWs[w.id]
+        ? (googleEmailFailed[w.id]
+          ? `<div class="wc-google linked" data-gws="${w.id}" data-ews="${w.id}">Load email</div>`
+          : `<div class="wc-google loading" data-gws="${w.id}" data-ews="${w.id}">Loading email…</div>`)
+        : `<div class="wc-google" data-ews="${w.id}">No Google account opened</div>`);
+    // The Ghost Workspace keeps no history: no creation date (it has no SQL
+    // row), no rename/delete buttons, and its stats say so up front.
+    const dateLine = isGhost
+      ? '<div class="wc-date">Nothing is written to disk</div>'
+      : `<div class="wc-date">Created ${timeAgo(w.created)}</div>`;
+    const headActions = isGhost ? '' : `
+          <button class="wc-rename" data-id="${w.id}" title="Rename workspace">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z"/><path d="M9.5 4l2.5 2.5"/></svg>
+          </button>
+          <button class="wc-del" data-id="${w.id}" title="Delete workspace">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+          </button>`;
     el.innerHTML = `
       <div class="wc-top"></div>
       <div class="wc-body">
@@ -303,17 +381,14 @@ function render(ws, filter = '') {
           <div class="wc-icon" style="background:${iconBg};color:${w.color||'#4a8bc5'}">${iconForWs(w, idx)}</div>
           <div class="wc-meta">
             <div class="wc-name">${esc(w.name)}</div>
-            <div class="wc-date">Created ${timeAgo(w.created)}</div>
+            ${gStatus}
+            ${dateLine}
           </div>
-          <button class="wc-rename" data-id="${w.id}" title="Rename workspace">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z"/><path d="M9.5 4l2.5 2.5"/></svg>
-          </button>
-          <button class="wc-del" data-id="${w.id}" title="Delete workspace">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-          </button>
+          ${headActions}
         </div>
         <div class="wc-stats">
           <span class="wc-stat"><span class="dot"></span>${w.tabCount} tab${w.tabCount !== 1 ? 's' : ''}</span>
+          ${isGhost ? '<span class="wc-stat ghost-pill">In-memory only</span>' : ''}
           ${playingBadge}
         </div>
         <div class="wc-open">
@@ -322,24 +397,45 @@ function render(ws, filter = '') {
         </div>
       </div>`;
     el.onclick = (e) => { if (e.target.closest('.wc-del, .wc-rename')) return; g.selectWorkspace(w.id); };
-    el.querySelector('.wc-del').onclick = async (e) => {
+    const delBtn = el.querySelector('.wc-del');
+    if (delBtn) delBtn.onclick = (e) => {
       e.stopPropagation();
-      await g.deleteWorkspace(w.id);
-      await load();
+      // Never delete immediately: ask for confirmation first.
+      openDelete(w);
     };
-    el.querySelector('.wc-rename').onclick = (e) => {
+    const renBtn = el.querySelector('.wc-rename');
+    if (renBtn) renBtn.onclick = (e) => {
       e.stopPropagation();
       openRename(w);
     };
+    const gEl = el.querySelector('.wc-google[data-gws]');
+    if (gEl) {
+      if (gEl.classList.contains('loading')) {
+        // Account is open: show its email below the name automatically
+        // (staggered so several workspaces don't all read at once).
+        setTimeout(() => autoLoadGoogleEmail(w.id, gEl), idx * 300);
+      } else {
+        // Read failed earlier: clicking retries.
+        gEl.onclick = (e) => {
+          e.stopPropagation();
+          googleEmailFailed[w.id] = false;
+          gEl.classList.remove('linked');
+          gEl.classList.add('loading');
+          gEl.textContent = 'Loading email…';
+          autoLoadGoogleEmail(w.id, gEl);
+        };
+      }
+    }
     gl.appendChild(el);
   });
 }
 
 async function load() {
-  const [u, ws, mediaState] = await Promise.all([g.getUser(), g.getWorkspaces(), g.getMediaState()]);
+  const [u, ws, mediaState, googleAccounts] = await Promise.all([g.getUser(), g.getWorkspaces(), g.getMediaState(), g.getGoogleAccounts()]);
   document.getElementById('uname').textContent = u ? u.pseudo : '—';
   allWorkspaces = ws || [];
   mediaByWs = mediaState.byWorkspace || {};
+  googleByWs = googleAccounts || {};
   const q = document.getElementById('ws-search').value;
   render(allWorkspaces, q);
   const npEl = document.getElementById('np');
@@ -398,10 +494,62 @@ document.getElementById('rni').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('rmok').click();
   if (e.key === 'Escape') document.getElementById('rmc').click();
 });
+
+// ── Delete workspace confirmation ──
+// Deleting is destructive (tabs, history, bookmarks and notes go with it), so
+// the delete button only OPENS this dialog — nothing is removed until the user
+// presses "Delete Workspace" here. Confirmation stays renderer-side, so direct
+// IPC callers (tests, scripts) are unaffected.
+let delId = null;
+function openDelete(w) {
+  delId = w.id;
+  document.getElementById('dmdesc').textContent =
+    'Delete “' + w.name + '”? All of its tabs, history, bookmarks and notes will be removed. This cannot be undone.';
+  document.getElementById('dmerr').textContent = '';
+  document.getElementById('dm').classList.add('open');
+}
+document.getElementById('dmc').onclick = () => { delId = null; document.getElementById('dm').classList.remove('open'); };
+document.getElementById('dmok').onclick = async () => {
+  if (!delId) return;
+  const id = delId;
+  const r = await g.deleteWorkspace(id);
+  if (r && r.ok) { delId = null; document.getElementById('dm').classList.remove('open'); await load(); }
+  else { document.getElementById('dmerr').textContent = (r && r.error) || 'Failed to delete workspace.'; }
+};
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('dm').classList.contains('open')) {
+    delId = null;
+    document.getElementById('dm').classList.remove('open');
+  }
+});
 document.getElementById('lgo').onclick = async () => { await g.logout(); window.location.href = 'login.html'; };
-document.getElementById('np').onclick = () => { if (allWorkspaces[0]) g.selectWorkspace(allWorkspaces[0].id); };
+// The pill is background media: open the workspace that is actually playing
+// it (not just the first one), so the user lands on the video they clicked.
+document.getElementById('np').onclick = () => {
+  const playing = allWorkspaces.find(w => (mediaByWs[w.id] || []).length > 0);
+  const target = playing || allWorkspaces[0];
+  if (target) g.selectWorkspace(target.id);
+};
 
 g.clearMenu();
+
+// The background watcher in main found another — or a newly opened — account
+// email on this workspace: store it and refresh the card in place (the value
+// is also persisted in SQL, so reloading this page shows it too).
+if (g.onGoogleEmailChanged) g.onGoogleEmailChanged((d) => {
+  if (!d || !d.wsId || !d.email) return;
+  googleEmails[d.wsId] = d.email;
+  googleEmailFailed[d.wsId] = false;
+  const els = document.querySelectorAll('.wc-google');
+  for (const el of els) {
+    if (el.getAttribute('data-ews') !== d.wsId) continue;
+    el.textContent = d.email;
+    el.className = 'wc-google email';
+    el.onclick = null;
+    break;
+  }
+});
+
 let mediaDebounce = null;
 g.onMediaState((d) => {
   mediaByWs = d.byWorkspace || {};
